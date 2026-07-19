@@ -1,0 +1,9 @@
+data/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+tests/fixtures/*.png
+tests/fixtures/*.jpg

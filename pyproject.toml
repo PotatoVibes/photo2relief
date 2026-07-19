@@ -1,0 +1,69 @@
+[project]
+name = "photo2relief"
+version = "0.1.0"
+description = "Photo to CNC-machinable 2.5D relief mesh converter"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.12",
+    "pillow>=11.0",
+    "pillow-heif>=0.20",
+    "numpy>=2.0",
+    "pydantic>=2.9",
+    "transformers>=4.44",
+]
+
+# torch is split into mutually-exclusive extras so the CPU Docker base image never
+# pulls CUDA wheels (hard rule in CLAUDE.md). Dev on the RTX 3080 + the GPU image use
+# `--extra cu128`; the CPU image uses `--extra cpu`. torch 2.9.1 exists in both indexes.
+[project.optional-dependencies]
+cpu = ["torch==2.9.1"]
+cu128 = ["torch==2.9.1"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.7",
+]
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu128" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "cu128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: real-inference smoke tests (deselected by default)",
+]
+addopts = "-m 'not slow'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
