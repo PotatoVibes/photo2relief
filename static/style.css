@@ -1,0 +1,17 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 2rem;
+}
+
+header h1 {
+  margin-bottom: 0.25rem;
+}
+
+.status {
+  opacity: 0.7;
+}
