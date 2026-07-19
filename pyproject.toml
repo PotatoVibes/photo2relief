@@ -14,6 +14,8 @@ dependencies = [
     "transformers>=4.44",
     "scipy>=1.14",
     "opencv-python-headless>=4.10",
+    "trimesh>=4.5",
+    "fast-simplification>=0.1.7",
 ]
 
 # torch is split into mutually-exclusive extras so the CPU Docker base image never

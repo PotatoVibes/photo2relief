@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+.coverage
 *.egg-info/
 tests/fixtures/*.png
 tests/fixtures/*.jpg
