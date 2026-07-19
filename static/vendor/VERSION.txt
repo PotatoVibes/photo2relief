@@ -1,0 +1,9 @@
+three.js 0.185.1 (MIT), vendored 2026-07-18 from the npm package via unpkg.com:
+  three/three.module.js      <- three@0.185.1/build/three.module.js
+  three/OrbitControls.js     <- three@0.185.1/examples/jsm/controls/OrbitControls.js
+  three/GLTFLoader.js        <- three@0.185.1/examples/jsm/loaders/GLTFLoader.js
+  utils/SkeletonUtils.js     <- three@0.185.1/examples/jsm/utils/SkeletonUtils.js   (GLTFLoader dep)
+  utils/BufferGeometryUtils.js <- three@0.185.1/examples/jsm/utils/BufferGeometryUtils.js (GLTFLoader dep)
+
+The utils/ siblings sit one level up because GLTFLoader imports them as '../utils/...'.
+Bare 'three' specifiers resolve via the import map in index.html. No CDN at runtime.
