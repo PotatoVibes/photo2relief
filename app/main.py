@@ -7,19 +7,20 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import cv2
 import numpy as np
 from fastapi import FastAPI, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
-from app import depth, heightmap
+from app import depth, heightmap, jobs
 from app.config import resolve_default_model
 from app.schemas import (
     ErrorResponse,
+    ExportJobResponse,
     HealthResponse,
     ImageInfo,
+    JobStatusResponse,
     ReliefParams,
     SessionCreateResponse,
     StatusResponse,
@@ -40,11 +41,15 @@ logger = logging.getLogger("photo2relief")
 PREVIEW_MAX_PX = 1024  # SPEC §4: preview PNG capped at ≤ 1024 px
 
 
-def _not_found(session_id: str) -> JSONResponse:
+def _error(status_code: int, error: str, detail: str) -> JSONResponse:
     return JSONResponse(
-        status_code=404,
-        content=ErrorResponse(error="not_found", detail=f"No session {session_id}").model_dump(),
+        status_code=status_code,
+        content=ErrorResponse(error=error, detail=detail).model_dump(),
     )
+
+
+def _not_found(session_id: str) -> JSONResponse:
+    return _error(404, "not_found", f"No session {session_id}")
 
 
 @asynccontextmanager
@@ -169,17 +174,6 @@ async def put_params(session_id: str, params: ReliefParams):
     return params
 
 
-def _luma_at_shape(source_rgb: Image.Image, shape: tuple[int, int]) -> np.ndarray:
-    """Grayscale luminance of the source image, resampled to (height, width) = shape."""
-    luma_full = np.asarray(source_rgb.convert("L"), dtype=np.float32) / 255.0
-    height, width = shape
-    if luma_full.shape == (height, width):
-        return luma_full
-    upscaling = width * height > luma_full.shape[1] * luma_full.shape[0]
-    interp = cv2.INTER_CUBIC if upscaling else cv2.INTER_AREA
-    return cv2.resize(luma_full, (width, height), interpolation=interp).astype(np.float32)
-
-
 def _encode_png_l(render: np.ndarray) -> bytes:
     img = Image.fromarray((np.clip(render, 0.0, 1.0) * 255).astype(np.uint8), mode="L")
     buf = io.BytesIO()
@@ -212,13 +206,66 @@ async def preview_heightmap(session_id: str, grayscale: bool = False):
 
     raw_depth = np.load(depth_path)
     with Image.open(session_dir(session_id) / SOURCE_IMAGE_NAME) as img:
-        luma = _luma_at_shape(img.convert("RGB"), raw_depth.shape)
+        luma = heightmap.luma_at_shape(img.convert("RGB"), raw_depth.shape)
 
     h = heightmap.compute_heightmap(raw_depth, luma, params, target_long_side=PREVIEW_MAX_PX)
     render = (
         h if grayscale else heightmap.hillshade(h, params.model_width_mm, params.relief_height_mm)
     )
     return Response(content=_encode_png_l(render), media_type="image/png")
+
+
+@app.post(
+    "/api/sessions/{session_id}/export",
+    response_model=ExportJobResponse,
+    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+)
+async def export_session(session_id: str, params: ReliefParams):
+    try:
+        read_meta(session_id)
+    except SessionNotFoundError:
+        return _not_found(session_id)
+
+    depth_path = depth.session_depth_path(session_id, params.depth_model)
+    if not depth_path.exists():
+        return _error(
+            409,
+            "depth_not_ready",
+            f"Depth for model '{params.depth_model}' isn't ready yet for this session; "
+            "poll /status.",
+        )
+
+    write_params(session_id, params)
+    job_id = jobs.start_export_job(session_id, params)
+    return ExportJobResponse(job_id=job_id)
+
+
+@app.get(
+    "/api/jobs/{job_id}",
+    response_model=JobStatusResponse,
+    responses={404: {"model": ErrorResponse}},
+)
+async def job_status(job_id: str):
+    job = jobs.get_job(job_id)
+    if job is None:
+        return _error(404, "not_found", f"No job {job_id}")
+    return JobStatusResponse(
+        status=job.status,
+        error=job.error,
+        download_url=f"/api/jobs/{job_id}/download" if job.status == "ready" else None,
+    )
+
+
+@app.get(
+    "/api/jobs/{job_id}/download",
+    responses={404: {"model": ErrorResponse}},
+)
+async def job_download(job_id: str):
+    job = jobs.get_job(job_id)
+    if job is None or job.status != "ready" or job.file_path is None:
+        return _error(404, "not_found", f"No completed job {job_id}")
+    media_type = "application/sla" if job.filename.endswith(".stl") else "model/obj"
+    return FileResponse(path=job.file_path, media_type=media_type, filename=job.filename)
 
 
 if STATIC_DIR.exists():

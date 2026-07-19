@@ -83,3 +83,13 @@ class StatusResponse(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     detail: str
+
+
+class ExportJobResponse(BaseModel):
+    job_id: str
+
+
+class JobStatusResponse(BaseModel):
+    status: str  # "processing" | "ready" | "error"
+    error: str | None
+    download_url: str | None

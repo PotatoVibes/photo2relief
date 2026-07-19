@@ -275,3 +275,92 @@ def test_preview_heightmap_completes_quickly(portrait_jpeg_bytes: bytes) -> None
     elapsed = time.monotonic() - started
     assert res.status_code == 200
     assert elapsed < 0.3  # SPEC M3 accept: previews return in < 300 ms
+
+
+# --- export / jobs -----------------------------------------------------------------------
+
+
+def _poll_job(job_id: str, timeout_s: float = 10.0) -> dict:
+    import time
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        body = client.get(f"/api/jobs/{job_id}").json()
+        if body["status"] != "processing":
+            return body
+        time.sleep(0.05)
+    raise AssertionError(f"job {job_id} did not finish within {timeout_s}s")
+
+
+def test_export_404_for_unknown_session() -> None:
+    res = client.post("/api/sessions/deadbeef/export", json={})
+    assert res.status_code == 404
+
+
+def test_export_409_when_depth_not_ready(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    res = client.post(f"/api/sessions/{session_id}/export", json={})
+    assert res.status_code == 409
+    assert res.json()["error"] == "depth_not_ready"
+
+
+def test_export_full_flow_produces_downloadable_stl(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    params = client.get(f"/api/sessions/{session_id}/params").json()
+    _write_fake_depth(session_id, params["depth_model"], shape=(96, 64))
+    params["resolution"] = 512
+
+    res = client.post(f"/api/sessions/{session_id}/export", json=params)
+    assert res.status_code == 200
+    job_id = res.json()["job_id"]
+
+    status = _poll_job(job_id)
+    assert status["status"] == "ready"
+    assert status["download_url"] == f"/api/jobs/{job_id}/download"
+
+    download = client.get(status["download_url"])
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/sla"
+    assert not download.content.startswith(b"solid")  # binary STL, not ASCII
+
+    import trimesh
+
+    mesh = trimesh.load(io.BytesIO(download.content), file_type="stl")
+    assert mesh.is_watertight
+
+
+def test_export_obj_format_downloads_as_text(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    params = client.get(f"/api/sessions/{session_id}/params").json()
+    _write_fake_depth(session_id, params["depth_model"], shape=(96, 64))
+    params["resolution"] = 512
+    params["output_format"] = "obj"
+
+    res = client.post(f"/api/sessions/{session_id}/export", json=params)
+    job_id = res.json()["job_id"]
+    status = _poll_job(job_id)
+    assert status["status"] == "ready"
+
+    download = client.get(status["download_url"])
+    assert download.headers["content-type"] == "model/obj"
+    assert download.content.startswith(b"#")
+
+
+def test_job_status_404_for_unknown_job() -> None:
+    res = client.get("/api/jobs/deadbeef")
+    assert res.status_code == 404
+
+
+def test_job_download_404_for_unknown_job() -> None:
+    res = client.get("/api/jobs/deadbeef/download")
+    assert res.status_code == 404
+
+
+def test_job_download_404_while_still_processing() -> None:
+    from app import jobs as jobs_module
+
+    job = jobs_module.ExportJob(job_id="still-processing", session_id="unused")
+    jobs_module._jobs[job.job_id] = job  # bypass the executor: deterministic "processing" state
+
+    res = client.get(f"/api/jobs/{job.job_id}/download")
+    assert res.status_code == 404
