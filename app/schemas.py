@@ -1,8 +1,55 @@
-"""Pydantic models for API payloads. ReliefParams (the tuning-parameter surface) lands in M3."""
+"""Pydantic models for API payloads: ReliefParams (the tuning-parameter surface, SPEC §3)
+plus session/health/status/error contracts.
+"""
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from app.config import MODEL_REGISTRY, resolve_default_model
+
+
+def _default_depth_model() -> str:
+    return resolve_default_model("cuda")
+
+
+class ReliefParams(BaseModel):
+    """The full tuning-parameter surface (SPEC §3). Persisted per session as params.json,
+    sent whole on every preview/export call. Defaults suit a portrait relief in wood."""
+
+    # Size
+    model_width_mm: float = Field(150.0, ge=10, le=1000)
+    relief_height_mm: float = Field(8.0, ge=0.5, le=100)
+    base_thickness_mm: float = Field(3.0, ge=0.5, le=50)
+    border_frame_mm: float = Field(0.0, ge=0, le=50)
+
+    # Depth shaping
+    depth_model: str = Field(default_factory=_default_depth_model)
+    invert_depth: bool = False
+    gamma: float = Field(1.0, ge=0.2, le=5.0)
+    depth_floor: float = Field(0.0, ge=0.0, le=1.0)
+    depth_ceiling: float = Field(1.0, ge=0.0, le=1.0)
+    flatten_background: bool = False
+    background_threshold: float = Field(0.15, ge=0.0, le=1.0)
+
+    # Surface
+    smoothing: float = Field(1.5, ge=0.0, le=10.0)
+    edge_preserve: bool = False
+    detail_blend: float = Field(0.15, ge=0.0, le=1.0)
+    edge_taper_mm: float = Field(0.0, ge=0, le=50)
+
+    # Export
+    resolution: Literal[512, 1024, 2048] = 1024
+    decimate_ratio: float = Field(0.0, ge=0.0, le=0.95)
+    output_format: Literal["stl", "obj"] = "stl"
+
+    def model_post_init(self, __context: object) -> None:
+        if self.depth_model not in MODEL_REGISTRY:
+            raise ValueError(f"Unknown depth_model '{self.depth_model}'.")
+        if self.depth_ceiling <= self.depth_floor:
+            raise ValueError("depth_ceiling must be greater than depth_floor.")
 
 
 class ImageInfo(BaseModel):

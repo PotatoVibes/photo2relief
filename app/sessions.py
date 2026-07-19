@@ -18,12 +18,14 @@ import pillow_heif
 from PIL import Image, ImageOps
 
 from app.config import settings
+from app.schemas import ReliefParams
 
 pillow_heif.register_heif_opener()
 
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF"}
 SOURCE_IMAGE_NAME = "source.png"
 META_FILE_NAME = "meta.json"
+PARAMS_FILE_NAME = "params.json"
 
 
 _meta_lock = Lock()
@@ -67,6 +69,26 @@ def write_status(session_id: str, **fields: object) -> dict:
         meta.update(fields)
         meta_path(session_id).write_text(json.dumps(meta, indent=2))
         return meta
+
+
+def params_path(session_id: str) -> Path:
+    return session_dir(session_id) / PARAMS_FILE_NAME
+
+
+def read_params(session_id: str) -> ReliefParams:
+    """Load persisted params, or the schema defaults if none have been saved yet."""
+    if not session_dir(session_id).exists():
+        raise SessionNotFoundError(session_id)
+    path = params_path(session_id)
+    if not path.exists():
+        return ReliefParams()
+    return ReliefParams.model_validate_json(path.read_text())
+
+
+def write_params(session_id: str, params: ReliefParams) -> None:
+    if not session_dir(session_id).exists():
+        raise SessionNotFoundError(session_id)
+    params_path(session_id).write_text(params.model_dump_json(indent=2))
 
 
 def create_session(image_bytes: bytes, filename: str) -> SessionInfo:
