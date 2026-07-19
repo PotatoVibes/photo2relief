@@ -23,6 +23,8 @@ trimesh's ``fix_normals()`` repair walks the face-adjacency graph and was measur
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import trimesh
 
@@ -134,14 +136,27 @@ def decimate_mesh(mesh: trimesh.Trimesh, ratio: float) -> trimesh.Trimesh:
     return trimesh.Trimesh(vertices=points, faces=faces, process=True)
 
 
-def build_export_mesh(heightmap: np.ndarray, params: ReliefParams) -> trimesh.Trimesh:
-    """Full meshing pipeline for export: build, validate, optionally decimate + re-validate."""
+def build_export_mesh(
+    heightmap: np.ndarray,
+    params: ReliefParams,
+    on_stage: Callable[[float, str], None] | None = None,
+) -> trimesh.Trimesh:
+    """Full meshing pipeline for export: build, validate, optionally decimate + re-validate.
+
+    ``on_stage(progress_fraction, stage_name)`` is invoked at stage boundaries so the
+    export job can report coarse progress; fractions are the job-level shares.
+    """
+    stage = on_stage or (lambda frac, name: None)
     mesh = build_relief_mesh(heightmap, params)
+    stage(0.45, "validating watertight")
     if not mesh.is_watertight:
         raise NotWatertightError("Assembled relief mesh failed the watertight check.")
-    mesh = decimate_mesh(mesh, params.decimate_ratio)
-    if not mesh.is_watertight:
-        raise NotWatertightError("Mesh failed the watertight check after decimation.")
+    if params.decimate_ratio > 0:
+        stage(0.65, "decimating")
+        mesh = decimate_mesh(mesh, params.decimate_ratio)
+        stage(0.72, "re-validating watertight")
+        if not mesh.is_watertight:
+            raise NotWatertightError("Mesh failed the watertight check after decimation.")
     return mesh
 
 

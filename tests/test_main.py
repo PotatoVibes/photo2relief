@@ -397,6 +397,9 @@ def test_export_full_flow_produces_downloadable_stl(portrait_jpeg_bytes: bytes) 
     status = _poll_job(job_id)
     assert status["status"] == "ready"
     assert status["download_url"] == f"/api/jobs/{job_id}/download"
+    # Stage-based progress reaches 1.0 on completion (SPEC §4 `progress?`).
+    assert status["progress"] == 1.0
+    assert status["stage"] == "done"
     # Summary fields for the UI's export summary line (SPEC §5.4).
     assert status["triangles"] > 0
     assert status["file_bytes"] > 0

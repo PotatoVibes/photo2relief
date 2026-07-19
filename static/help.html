@@ -17,6 +17,13 @@
     </header>
 
     <main>
+      <nav class="toc">
+        Jump to:
+        <a href="#size">Size</a> ·
+        <a href="#shaping">Shaping</a> ·
+        <a href="#export">Export</a>
+      </nav>
+
       <h2>How the pipeline works</h2>
       <p>
         Your photo goes through three stages:
@@ -46,7 +53,7 @@
         Because the two families distribute depth so differently, <strong>clip and threshold values do not transfer between models</strong>. On da2-* the whole background may live below 0.1 (use small thresholds like 0.02&ndash;0.08); on da3mono the same background can span 0.2&ndash;0.5.
       </div>
 
-      <h2>Size tab</h2>
+      <h2 id="size">Size tab</h2>
 
       <h3>Width (mm)</h3>
       <p class="param-meta">10&ndash;1000 mm &middot; default 150</p>
@@ -68,7 +75,7 @@
         <figure><img src="/help/img/frame_10.png" alt="10 mm frame" /><figcaption>frame = 10 mm (white = full stock height)</figcaption></figure>
       </div>
 
-      <h2>Shaping tab — depth</h2>
+      <h2 id="shaping">Shaping tab — depth</h2>
 
       <h3>Invert depth</h3>
       <p class="param-meta">off by default</p>
@@ -89,9 +96,15 @@
 
       <h3>Depth floor / depth ceiling</h3>
       <p class="param-meta">0&ndash;1 each &middot; defaults 0 / 1 (off)</p>
-      <p>Clips the depth range <em>before</em> everything else, then re-stretches what survives to fill 0&ndash;1. Raising the <strong>floor</strong> merges everything farther than that value into the flat background &mdash; the standard way to kill busy room clutter behind a subject. Lowering the <strong>ceiling</strong> clamps blown-out foreground spikes (a hand or nose much closer than the rest) so they stop eating your whole relief range.</p>
+      <p>Clips the depth range <em>before</em> everything else, then re-stretches what survives to fill 0&ndash;1. Each comparison below changes exactly one value against the defaults.</p>
+      <p>Raising the <strong>floor</strong> merges everything farther than that value into the flat background &mdash; the standard way to kill busy room clutter behind a subject:</p>
       <div class="figrow">
+        <figure><img src="/help/img/baseline_gray.png" alt="floor 0 (default)" /><figcaption>floor 0 (default)</figcaption></figure>
         <figure><img src="/help/img/floor_035.png" alt="floor 0.35" /><figcaption>floor 0.35 &mdash; far room merged to flat</figcaption></figure>
+      </div>
+      <p>Lowering the <strong>ceiling</strong> clamps blown-out foreground spikes (a hand or nose much closer than the rest) so they stop eating your whole relief range:</p>
+      <div class="figrow">
+        <figure><img src="/help/img/baseline_gray.png" alt="ceiling 1 (default)" /><figcaption>ceiling 1 (default)</figcaption></figure>
         <figure><img src="/help/img/ceiling_07.png" alt="ceiling 0.7" /><figcaption>ceiling 0.7 &mdash; near spikes clamped, mid-range expanded</figcaption></figure>
       </div>
 
@@ -139,7 +152,7 @@
         <figure><img src="/help/img/taper_10.png" alt="taper 10mm" /><figcaption>taper 10 mm &mdash; edges ramp to base</figcaption></figure>
       </div>
 
-      <h2>Export tab</h2>
+      <h2 id="export">Export tab</h2>
 
       <h3>Resolution (grid long side)</h3>
       <p class="param-meta">512 / 1024 / 2048 &middot; default 1024</p>

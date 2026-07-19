@@ -105,6 +105,9 @@ class JobStatusResponse(BaseModel):
     status: str  # "processing" | "ready" | "error"
     error: str | None
     download_url: str | None
+    # Coarse stage-based progress while processing (SPEC §4's `progress?`).
+    progress: float = 0.0  # 0..1
+    stage: str | None = None
     # Populated once ready -- feeds the UI's export summary line (SPEC §5.4).
     triangles: int | None = None
     file_bytes: int | None = None

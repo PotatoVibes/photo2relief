@@ -134,6 +134,26 @@ def test_decimate_reduces_triangle_count_and_stays_watertight() -> None:
     assert len(decimated.faces) < original_tris
 
 
+def test_build_export_mesh_without_decimation_skips_that_stage() -> None:
+    hm = _synthetic_heightmap(40, 40)
+    stages: list[str] = []
+    mesh = meshing.build_export_mesh(hm, _params(), on_stage=lambda frac, name: stages.append(name))
+    assert mesh.is_watertight
+    assert stages == ["validating watertight"]  # no decimate stages at ratio 0
+
+
+def test_build_export_mesh_reports_stage_progress() -> None:
+    hm = _synthetic_heightmap(40, 40)
+    stages: list[tuple[float, str]] = []
+    meshing.build_export_mesh(
+        hm, _params(decimate_ratio=0.5), on_stage=lambda frac, name: stages.append((frac, name))
+    )
+    names = [name for _, name in stages]
+    assert names == ["validating watertight", "decimating", "re-validating watertight"]
+    fracs = [frac for frac, _ in stages]
+    assert fracs == sorted(fracs)  # progress is monotonic
+
+
 def test_build_export_mesh_applies_decimation() -> None:
     hm = _synthetic_heightmap(80, 80)
     params = _params(decimate_ratio=0.6)

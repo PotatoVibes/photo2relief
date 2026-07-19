@@ -44,8 +44,18 @@ header {
 header h1 { margin: 0; font-size: 18px; }
 .tagline { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
 .header-right { display: flex; align-items: center; gap: 14px; }
-.help-link { color: var(--accent); font-size: 13px; text-decoration: none; }
-.help-link:hover { text-decoration: underline; }
+.help-btn {
+  display: inline-block;
+  padding: 6px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.help-btn:hover { background: var(--accent); color: #211a10; }
 
 .pill {
   padding: 4px 12px;
@@ -193,16 +203,20 @@ button.secondary { background: var(--panel-2); color: var(--text); border: 1px s
 .summary { font-size: 12px; color: var(--accent-2); margin: 8px 0 0; }
 
 /* Previews */
+/* Previews sit side by side: heightmap left, 3D right (owner feedback). The error
+   banner spans both columns; when hidden its row collapses to zero. */
 .previews {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
   min-height: 0;
 }
 
 .error-banner {
-  flex: 0 0 auto;
+  grid-column: 1 / -1;
+  grid-row: 1;
   background: #3a1f1d;
   border: 1px solid var(--error);
   color: #f0b6b1;
@@ -211,7 +225,7 @@ button.secondary { background: var(--panel-2); color: var(--text); border: 1px s
   font-size: 13px;
 }
 
-.preview-card { display: flex; flex-direction: column; min-height: 0; flex: 1 1 0; }
+.preview-card { display: flex; flex-direction: column; min-height: 0; grid-row: 2; }
 .preview-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex: 0 0 auto; }
 .preview-head h2 { margin: 0; }
 .preview-head .hint { margin: 0; font-weight: 400; }
@@ -282,7 +296,8 @@ button.secondary { background: var(--panel-2); color: var(--text); border: 1px s
 @media (max-width: 900px) {
   body { overflow: auto; }
   #app { grid-template-columns: 1fr; }
-  .preview-card { flex: 0 0 auto; }
+  .previews { grid-template-columns: 1fr; grid-template-rows: none; }
+  .preview-card { grid-row: auto; }
   .preview-body { min-height: 40vh; }
 }
 
@@ -304,3 +319,14 @@ body.doc { display: block; overflow: auto; }
 .figrow figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; text-align: center; }
 .doc .tip { background: var(--panel); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 14px 0; font-size: 13px; }
 .doc .back { color: var(--accent); text-decoration: none; font-size: 13px; }
+.doc .toc {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.doc .toc a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.doc .toc a:hover { text-decoration: underline; }
+.doc h2[id] { scroll-margin-top: 12px; }

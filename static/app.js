@@ -255,11 +255,15 @@ function syncControlsFromParams() {
 
 function updateDerivedSize() {
   if (!state.image) return;
-  const frame = 2 * state.params.border_frame_mm;
-  const w = state.params.model_width_mm + frame;
-  const h = (state.params.model_width_mm * state.image.h) / state.image.w + frame;
+  const p = state.params;
+  const frame = 2 * p.border_frame_mm;
+  const w = p.model_width_mm + frame;
+  const h = (p.model_width_mm * state.image.h) / state.image.w + frame;
+  const thick = p.base_thickness_mm + p.relief_height_mm;
   $("derived-size").textContent =
     `Finished part ≈ ${w} × ${h.toFixed(1)} mm (photo aspect + frame)`;
+  $("stock-size").textContent =
+    `Stock ≈ ${w} × ${h.toFixed(1)} × ${thick.toFixed(1)} mm (thickness = base + relief)`;
 }
 
 // --- model dropdown -----------------------------------------------------------------------
@@ -364,6 +368,7 @@ async function tryResume() {
 async function waitForDepth() {
   state.depthReady = false;
   $("export-btn").disabled = true;
+  const startedAt = Date.now();
   let s;
   for (;;) {
     s = await (await api(`/api/sessions/${state.sessionId}/status`)).json();
@@ -375,7 +380,8 @@ async function waitForDepth() {
       showError(`Depth inference failed: ${s.error}`);
       return;
     }
-    const msg = `Estimating depth (${s.model_id ?? "…"} on ${s.device ?? "…"})…`;
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    const msg = `Estimating depth (${s.model_id ?? "…"} on ${s.device ?? "…"})… ${elapsed}s`;
     setPill("busy", "Estimating depth…");
     setBusy("2d", msg);
     setBusy("3d", msg);
@@ -397,7 +403,7 @@ async function waitForDepth() {
 function onParamChanged(id, value) {
   state.params[id] = value;
   if (id === "depth_floor" || id === "depth_ceiling") syncControlsFromParams();
-  if (id === "model_width_mm") updateDerivedSize();
+  updateDerivedSize(); // finished-part + stock readouts track width/frame/base/relief
   saveAndRefresh();
 }
 
@@ -646,6 +652,8 @@ $("export-btn").addEventListener("click", async () => {
     for (;;) {
       job = await (await api(`/api/jobs/${job_id}`)).json();
       if (job.status !== "processing") break;
+      const pct = Math.round((job.progress ?? 0) * 100);
+      $("export-status").textContent = `Exporting… ${pct}% — ${job.stage ?? "starting"}`;
       await new Promise((r) => setTimeout(r, 500));
     }
     if (job.status === "error") throw new Error(job.error);

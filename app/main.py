@@ -306,6 +306,8 @@ async def job_status(job_id: str):
         status=job.status,
         error=job.error,
         download_url=f"/api/jobs/{job_id}/download" if job.status == "ready" else None,
+        progress=job.progress,
+        stage=job.stage,
         triangles=job.triangles,
         file_bytes=job.file_bytes,
         width_mm=job.width_mm,
