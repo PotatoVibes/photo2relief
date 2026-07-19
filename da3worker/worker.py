@@ -29,9 +29,8 @@ def main() -> int:
 
     import numpy as np
     import torch
-    from PIL import Image
-
     from depth_anything_3.api import DepthAnything3
+    from PIL import Image
 
     device = args.device
     if device == "cuda" and not torch.cuda.is_available():
