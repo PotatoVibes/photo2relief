@@ -1,0 +1,42 @@
+[project]
+name = "photo2relief-da3worker"
+version = "0.1.0"
+description = "Isolated inference worker for the DA3 depth backend (depth_anything_3 pins numpy<2, which conflicts with the main app's numpy-2 stack)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "depth-anything-3==0.1.1",
+    # Used by depth_anything_3.model.da3 but missing from its declared deps (v0.1.1).
+    "addict>=2.4",
+]
+
+# Same mutually-exclusive torch split as the main project: the GPU image / dev box use
+# --extra cu128, a CPU install uses --extra cpu. torch 2.9.1 exists in both indexes.
+[project.optional-dependencies]
+cpu = ["torch==2.9.1", "torchvision==0.24.1"]
+cu128 = ["torch==2.9.1", "torchvision==0.24.1"]
+
+[tool.uv]
+package = false
+conflicts = [[{ extra = "cpu" }, { extra = "cu128" }]]
+# Only lock for the platforms we actually run on (Windows dev box, Linux container).
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "cu128" },
+]
+torchvision = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "cu128" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
