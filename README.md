@@ -6,6 +6,8 @@ Under the hood: monocular depth estimation (Depth Anything family) → heightmap
 
 > **Status:** Under construction, built milestone-by-milestone per `SPEC.md`. Sections below describe target behavior; anything not yet true should be flagged in `CLAUDE.md`.
 
+![Photo2Relief — upload a photo, tune the relief with live 2D/3D previews, export a watertight STL](docs/screenshot.png)
+
 ## Quick start
 
 Prerequisites: Docker + Docker Compose. For GPU mode (recommended): an NVIDIA GPU and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
@@ -19,6 +21,14 @@ docker compose up --build
 ```
 
 Open **http://localhost:8090**. First run downloads the default depth model into `./data/models/` (one-time, ~1–2 GB); after that the app works fully offline. Port and other settings are env-configurable — see `docker-compose.yml`.
+
+## Security & scope
+
+This is a **single-user, unauthenticated tool meant to run on your own machine.** There are no accounts or access control — anyone who can reach the port can upload images, run compute, and download meshes. Treat it like a local dev server:
+
+- The Docker compose file binds the port to **`127.0.0.1` (localhost only)** by default, so nothing is exposed to your network out of the box. That's deliberate — keep it that way.
+- **Do not** port-forward it or put it on a public IP as-is. If you genuinely need remote/LAN access, put an authenticating reverse proxy (or at least HTTP basic auth) in front of it first, and only then change the `127.0.0.1` prefix in `docker-compose.yml`.
+- It has no rate limiting and keeps every uploaded session on disk under `./data/`, so an untrusted caller could fill your disk or saturate your GPU. Fine on localhost; not fine when exposed.
 
 ## Using the app
 
@@ -48,7 +58,7 @@ Tip: run the same photo through DA3MONO and DA2-Large and compare the hillshades
 ## Importing into Autodesk Fusion
 
 1. **Insert → Insert Mesh**, select the exported `.stl`.
-2. **Set units to millimeters** — STL is unitless and this is the classic gotcha. The correct physical size is embedded in the filename (e.g., `photo2relief_ab12_150x100mm.stl`); sanity-check the bounding box after import.
+2. **Set units to millimeters** — STL is unitless and this is the classic gotcha. The correct physical stock size is embedded in the filename as `width × height × thickness` (e.g. `dog_170x220x26mm.stl`, named after your uploaded photo); sanity-check the bounding box after import.
 3. Flip/orient as needed; the mesh is a closed solid (relief + base slab), so Fusion's **Manufacture** workspace can toolpath it directly as a mesh body — no BRep conversion required.
 4. Typical CAM recipe for wood: 3D Adaptive Clearing with a 1/4" end mill leaving ~0.5 mm stock, then Parallel finishing with a ball nose (1/8" or smaller for fine portraits, ~8–10% stepover). The base slab gives you material to hold in the vise or screw to a spoilboard; add a border frame in the app if you want dedicated clamp real estate.
 5. Undercuts are impossible by construction (single-viewpoint relief), so everything is reachable by a 3-axis machine.
