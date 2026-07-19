@@ -143,6 +143,9 @@ async def session_status(session_id: str):
         device=meta.get("device"),
         elapsed_s=meta.get("elapsed_s"),
         error=meta.get("error"),
+        width=meta.get("width"),
+        height=meta.get("height"),
+        original_filename=meta.get("original_filename"),
     )
 
 
@@ -221,12 +224,14 @@ async def preview_heightmap(session_id: str, grayscale: bool = False):
 @app.get("/api/models", response_model=ModelsResponse)
 async def list_models() -> ModelsResponse:
     """Registry contents for the UI's depth-model dropdown (SPEC §5.1.1)."""
+    default_model = resolve_default_model(depth.select_device())
     return ModelsResponse(
         models=[
             ModelInfo(model_id=s.model_id, role=s.role, license=s.license, available=s.available)
             for s in MODEL_REGISTRY.values()
         ],
-        default_model=resolve_default_model(depth.select_device()),
+        default_model=default_model,
+        default_params=ReliefParams(depth_model=default_model),
     )
 
 

@@ -97,10 +97,13 @@ def edge_taper(h: np.ndarray, taper_mm: float, model_width_mm: float) -> np.ndar
 
 
 def border_frame(h: np.ndarray, frame_mm: float, model_width_mm: float) -> np.ndarray:
-    """Pad with a flat, zero-height margin around the image (mounting/clamping flange).
+    """Pad with a flat margin at FULL height (1.0) around the image.
 
-    Uses the same model_width_mm->px scale as the image content, since the frame is
-    physically outside the modeled subject, not a rescale of it.
+    The frame is a machinable reference at the top of the CNC stock
+    (base + relief = full stock thickness), so its height tracks relief_height_mm
+    automatically — owner decision 2026-07-19, overriding the SPEC's original
+    "full-zero flange". Uses the same model_width_mm->px scale as the image content,
+    since the frame is physically outside the modeled subject, not a rescale of it.
     """
     if frame_mm <= 0:
         return h
@@ -110,7 +113,7 @@ def border_frame(h: np.ndarray, frame_mm: float, model_width_mm: float) -> np.nd
     if frame_px <= 0:
         return h
     height = h.shape[0]
-    out = np.zeros((height + 2 * frame_px, width + 2 * frame_px), dtype=np.float32)
+    out = np.full((height + 2 * frame_px, width + 2 * frame_px), 1.0, dtype=np.float32)
     out[frame_px : frame_px + height, frame_px : frame_px + width] = h
     return out
 

@@ -78,6 +78,10 @@ class StatusResponse(BaseModel):
     device: str | None
     elapsed_s: float | None
     error: str | None
+    # Session identity, so a reloaded page can resume without re-uploading.
+    width: int | None = None
+    height: int | None = None
+    original_filename: str | None = None
 
 
 class ErrorResponse(BaseModel):
@@ -110,3 +114,4 @@ class ModelInfo(BaseModel):
 class ModelsResponse(BaseModel):
     models: list[ModelInfo]
     default_model: str  # the id auto-selected for this device
+    default_params: ReliefParams  # canonical defaults for this device (UI Reset button)

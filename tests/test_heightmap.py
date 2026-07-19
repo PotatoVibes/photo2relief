@@ -174,16 +174,20 @@ def test_border_frame_subpixel_mm_rounds_to_noop() -> None:
     np.testing.assert_array_equal(out, h)
 
 
-def test_border_frame_pads_with_flat_zero_margin() -> None:
+def test_border_frame_pads_with_flat_full_height_margin() -> None:
+    # The frame is a machinable reference at full stock height (base + relief), NOT a
+    # zero-height flange -- its physical height must track relief_height_mm (owner
+    # decision 2026-07-19; see Decisions log).
     size = 100
-    h = np.ones((size, size), dtype=np.float32)
+    h = np.full((size, size), 0.25, dtype=np.float32)
     # 1 px/mm, 5 mm frame -> 5 px pad on every side.
     out = hm.border_frame(h, frame_mm=5.0, model_width_mm=100.0)
     assert out.shape == (110, 110)
-    assert np.all(out[:5, :] == 0.0)
-    assert np.all(out[-5:, :] == 0.0)
-    assert np.all(out[:, :5] == 0.0)
-    assert np.all(out[5:105, 5:105] == 1.0)
+    assert np.all(out[:5, :] == 1.0)
+    assert np.all(out[-5:, :] == 1.0)
+    assert np.all(out[:, :5] == 1.0)
+    assert np.all(out[:, -5:] == 1.0)
+    assert np.all(out[5:105, 5:105] == 0.25)
 
 
 # --- compute_heightmap (end-to-end orchestration) ------------------------------------------
@@ -227,9 +231,9 @@ def test_compute_heightmap_applies_invert_and_flatten_and_frame() -> None:
         detail_blend=0.0,
     )
     out = hm.compute_heightmap(raw, luma, params, target_long_side=64)
-    # border_frame_mm=10 @ 1 px/mm on a 64px grid -> 10 px pad each side.
+    # border_frame_mm=10 @ 1 px/mm on a 64px grid -> 10 px pad each side, at full height.
     assert out.shape == (84, 84)
-    assert np.all(out[:10, :] == 0.0)
+    assert np.all(out[:10, :] == 1.0)
 
 
 # --- hillshade ------------------------------------------------------------------------------

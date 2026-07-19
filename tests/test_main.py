@@ -290,6 +290,17 @@ def test_models_endpoint_lists_registry() -> None:
     assert body["default_model"] in MODEL_REGISTRY
     for m in body["models"]:
         assert m["role"] and m["license"]
+    # Canonical defaults for the UI's Reset button, keyed to this device's model.
+    assert body["default_params"]["depth_model"] == body["default_model"]
+    assert body["default_params"]["model_width_mm"] == 150.0
+
+
+def test_status_endpoint_carries_session_identity_for_resume(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    body = client.get(f"/api/sessions/{session_id}/status").json()
+    assert body["width"] == 400
+    assert body["height"] == 600
+    assert body["original_filename"] == "portrait.jpg"
 
 
 # --- preview/mesh ------------------------------------------------------------------------
