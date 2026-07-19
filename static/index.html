@@ -5,15 +5,101 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Photo2Relief</title>
     <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="data:," />
+    <script type="importmap">
+      { "imports": { "three": "/vendor/three/three.module.js" } }
+    </script>
   </head>
   <body>
     <header>
-      <h1>Photo2Relief</h1>
-      <p>Photo &rarr; heightmap &rarr; CNC-machinable relief mesh.</p>
+      <div>
+        <h1>Photo2Relief</h1>
+        <p class="tagline">Photo &rarr; heightmap &rarr; CNC-machinable relief mesh (mm)</p>
+      </div>
+      <span id="status-pill" class="pill pill-idle">No photo</span>
     </header>
+
     <main id="app">
-      <p class="status">Under construction — parameter UI and previews land in M5.</p>
+      <aside class="sidebar">
+        <section class="card" id="upload-card">
+          <h2>Photo</h2>
+          <label id="dropzone" for="file-input">
+            <span id="dropzone-text">Drop a photo here or click to choose</span>
+            <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
+          </label>
+          <p id="image-info" class="hint"></p>
+        </section>
+
+        <section class="card param-groups" id="params-card" hidden>
+          <h2>Parameters</h2>
+
+          <details open>
+            <summary>Depth model</summary>
+            <div class="control">
+              <select id="depth_model"></select>
+              <p class="hint" id="model-hint"></p>
+            </div>
+          </details>
+
+          <details open>
+            <summary>Size</summary>
+            <div id="group-size"></div>
+            <p class="hint" id="derived-size"></p>
+          </details>
+
+          <details open>
+            <summary>Depth shaping</summary>
+            <div id="group-depth"></div>
+          </details>
+
+          <details open>
+            <summary>Surface</summary>
+            <div id="group-surface"></div>
+          </details>
+
+          <details>
+            <summary>Export settings</summary>
+            <div id="group-export"></div>
+            <p class="hint">Fusion + CAM handle 2M triangles fine; decimation mainly shrinks file size.</p>
+          </details>
+
+          <button id="reset-btn" class="secondary">Reset to defaults</button>
+        </section>
+
+        <section class="card" id="export-card" hidden>
+          <h2>Export</h2>
+          <button id="export-btn">Export mesh</button>
+          <p id="export-status" class="hint"></p>
+          <p id="export-summary" class="summary" hidden></p>
+          <a id="download-link" hidden>Download again</a>
+        </section>
+      </aside>
+
+      <section class="previews">
+        <div id="error-banner" class="error-banner" hidden></div>
+
+        <div class="card preview-card">
+          <div class="preview-head">
+            <h2>Heightmap preview</h2>
+            <label class="toggle"><input type="checkbox" id="grayscale-toggle" /> grayscale</label>
+          </div>
+          <div class="preview-body" id="preview2d-body">
+            <p class="placeholder" id="preview2d-placeholder">Upload a photo to see the relief preview.</p>
+            <img id="preview2d" alt="Hillshaded heightmap preview" hidden />
+          </div>
+        </div>
+
+        <div class="card preview-card viewport-card">
+          <div class="preview-head">
+            <h2>3D preview <span class="hint">(reduced resolution &mdash; export is full-res)</span></h2>
+          </div>
+          <div class="preview-body" id="viewport">
+            <p class="placeholder" id="preview3d-placeholder">The 3D preview appears here.</p>
+          </div>
+        </div>
+      </section>
     </main>
+
     <script type="module" src="/app.js"></script>
   </body>
 </html>
