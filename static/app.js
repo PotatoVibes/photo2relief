@@ -35,7 +35,7 @@ const PARAM_GROUPS = {
       min: 0,
       max: 50,
       step: 0.5,
-      hint: "Flat margin at full stock height (base + relief) around the image — a machinable clamping/reference edge.",
+      hint: "Flat margin at full stock height (base + relief) — a machinable clamping edge.",
     },
   ],
   "group-depth": [
@@ -255,10 +255,11 @@ function syncControlsFromParams() {
 
 function updateDerivedSize() {
   if (!state.image) return;
-  const h = (state.params.model_width_mm * state.image.h) / state.image.w;
+  const frame = 2 * state.params.border_frame_mm;
+  const w = state.params.model_width_mm + frame;
+  const h = (state.params.model_width_mm * state.image.h) / state.image.w + frame;
   $("derived-size").textContent =
-    `Physical size ≈ ${state.params.model_width_mm} × ${h.toFixed(1)} mm ` +
-    `(height follows the photo's aspect ratio; a border frame adds to both)`;
+    `Finished part ≈ ${w} × ${h.toFixed(1)} mm (photo aspect + frame)`;
 }
 
 // --- model dropdown -----------------------------------------------------------------------

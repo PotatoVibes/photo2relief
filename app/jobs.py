@@ -72,10 +72,11 @@ def _run_export(job: ExportJob, params: ReliefParams) -> None:
         mesh = meshing.build_export_mesh(h, params)
         data = meshing.export_bytes(mesh, params.output_format)
 
-        model_height_mm = params.model_width_mm * h.shape[0] / h.shape[1]
+        # Physical dims include the border frame (total_width_mm), matching the mesh.
+        model_height_mm = params.total_width_mm * h.shape[0] / h.shape[1]
         filename = (
             f"photo2relief_{job.session_id}_"
-            f"{_fmt_dim_mm(params.model_width_mm)}x{_fmt_dim_mm(model_height_mm)}mm."
+            f"{_fmt_dim_mm(params.total_width_mm)}x{_fmt_dim_mm(model_height_mm)}mm."
             f"{params.output_format}"
         )
         out_path = session_dir(job.session_id) / filename
@@ -88,7 +89,7 @@ def _run_export(job: ExportJob, params: ReliefParams) -> None:
             job.filename = filename
             job.triangles = len(mesh.faces)
             job.file_bytes = len(data)
-            job.width_mm = params.model_width_mm
+            job.width_mm = params.total_width_mm
             job.height_mm = round(model_height_mm, 2)
             job.elapsed_s = round(time.monotonic() - started, 3)
             job.status = "ready"

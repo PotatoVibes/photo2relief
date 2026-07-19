@@ -51,6 +51,14 @@ class ReliefParams(BaseModel):
         if self.depth_ceiling <= self.depth_floor:
             raise ValueError("depth_ceiling must be greater than depth_floor.")
 
+    @property
+    def total_width_mm(self) -> float:
+        """Physical X of the finished part: model_width_mm is the IMAGE CONTENT width;
+        a border frame adds to it on both sides. Everything that maps the (possibly
+        frame-padded) heightmap grid to millimeters must use this, so the frame comes
+        out exactly border_frame_mm wide and the content exactly model_width_mm."""
+        return self.model_width_mm + 2 * self.border_frame_mm
+
 
 class ImageInfo(BaseModel):
     w: int

@@ -50,7 +50,7 @@
 
       <h3>Width (mm)</h3>
       <p class="param-meta">10&ndash;1000 mm &middot; default 150</p>
-      <p>Physical X size of the finished piece. Height is derived from the photo's aspect ratio (shown under the sliders). Everything in the app is millimeters, end to end &mdash; the exported STL matches these numbers exactly.</p>
+      <p>Physical X size of the <em>image content</em>. Height is derived from the photo's aspect ratio, and a border frame adds to both dimensions on top of this (the finished-part size shows under the sliders). Everything in the app is millimeters, end to end &mdash; the exported STL matches these numbers exactly.</p>
 
       <h3>Relief height (mm)</h3>
       <p class="param-meta">0.5&ndash;100 mm &middot; default 8</p>
@@ -62,7 +62,7 @@
 
       <h3>Border frame (mm)</h3>
       <p class="param-meta">0&ndash;50 mm &middot; default 0 (off)</p>
-      <p>Adds a flat margin around the image at <strong>full stock height</strong> (base + relief). It's a machinable reference and clamping surface at the exact top-of-stock plane &mdash; useful for workholding, for facing checks, and for a clean physical frame. Note it adds to the finished part's width and height.</p>
+      <p>Adds a flat margin around the image at <strong>full stock height</strong> (base + relief). It's a machinable reference and clamping surface at the exact top-of-stock plane &mdash; useful for workholding, for facing checks, and for a clean physical frame. The frame is exactly this many millimeters wide and <em>adds</em> to the finished part's width and height (a 150&nbsp;mm image with a 10&nbsp;mm frame exports 170&nbsp;mm wide).</p>
       <div class="figrow">
         <figure><img src="/help/img/baseline_gray.png" alt="no frame" /><figcaption>frame = 0</figcaption></figure>
         <figure><img src="/help/img/frame_10.png" alt="10 mm frame" /><figcaption>frame = 10 mm (white = full stock height)</figcaption></figure>

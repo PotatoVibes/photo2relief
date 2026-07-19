@@ -71,7 +71,7 @@ header h1 { margin: 0; font-size: 18px; }
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
   overflow-y: auto; /* safety valve on short windows; normally fits */
 }
@@ -80,7 +80,7 @@ header h1 { margin: 0; font-size: 18px; }
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px 12px;
 }
 .card h2 { margin: 0 0 8px; font-size: 14px; }
 
@@ -89,7 +89,7 @@ header h1 { margin: 0; font-size: 18px; }
   display: block;
   border: 2px dashed var(--border);
   border-radius: 8px;
-  padding: 14px 12px;
+  padding: 8px 12px;
   text-align: center;
   color: var(--muted);
   cursor: pointer;
@@ -105,7 +105,7 @@ header h1 { margin: 0; font-size: 18px; }
 .tabbar {
   display: flex;
   gap: 4px;
-  margin: 12px 0 6px;
+  margin: 10px 0 4px;
   border-bottom: 1px solid var(--border);
 }
 .tab {
@@ -138,7 +138,7 @@ header h1 { margin: 0; font-size: 18px; }
 }
 
 /* Parameter controls */
-.control { margin: 8px 0 2px; }
+.control { margin: 6px 0 2px; }
 .control label.name {
   display: flex;
   justify-content: space-between;

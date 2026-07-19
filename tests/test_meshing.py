@@ -60,6 +60,26 @@ def test_bbox_matches_params_within_tolerance() -> None:
     assert bounds[1][2] == pytest.approx(expected_z_max, abs=0.01)
 
 
+def test_border_frame_adds_to_physical_size_at_exact_mm() -> None:
+    """model_width_mm is the IMAGE CONTENT width; a border frame extends the part.
+    Round trip heightmap.border_frame -> mesh: the part must be exactly
+    content + 2*frame wide, and the frame surface must sit at full stock height.
+    """
+    from app import heightmap as hm
+
+    content = np.zeros((80, 100), dtype=np.float32)  # 100 px content = 100 mm -> 1 px/mm
+    params = _params(model_width_mm=100.0, border_frame_mm=10.0)
+    padded = hm.border_frame(content, frame_mm=10.0, model_width_mm=100.0)
+    mesh = meshing.build_relief_mesh(padded, params)
+
+    assert mesh.is_watertight
+    assert mesh.bounds[1][0] == pytest.approx(120.0, abs=0.01)  # 100 + 2*10
+    # Frame pixels (heightmap = 1.0) sit at base + relief = full stock height.
+    assert mesh.bounds[1][2] == pytest.approx(
+        params.base_thickness_mm + params.relief_height_mm, abs=0.01
+    )
+
+
 def test_flat_zero_heightmap_bbox_is_just_the_base_slab() -> None:
     hm = np.zeros((20, 30), dtype=np.float32)
     params = _params(model_width_mm=90.0, relief_height_mm=5.0, base_thickness_mm=2.5)

@@ -216,7 +216,7 @@ async def preview_heightmap(session_id: str, grayscale: bool = False):
 
     h = heightmap.compute_heightmap(raw_depth, luma, params, target_long_side=PREVIEW_MAX_PX)
     render = (
-        h if grayscale else heightmap.hillshade(h, params.model_width_mm, params.relief_height_mm)
+        h if grayscale else heightmap.hillshade(h, params.total_width_mm, params.relief_height_mm)
     )
     return Response(content=_encode_png_l(render), media_type="image/png")
 

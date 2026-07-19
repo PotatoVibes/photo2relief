@@ -62,9 +62,12 @@ def build_relief_mesh(heightmap: np.ndarray, params: ReliefParams) -> trimesh.Tr
     Y coordinate so the relief isn't mirrored vertically.
     """
     h, w = heightmap.shape
-    model_height_mm = params.model_width_mm * h / w
+    # total_width_mm, not model_width_mm: the heightmap may carry a border-frame pad,
+    # and the frame adds to the part's physical size rather than squeezing the image.
+    total_width_mm = params.total_width_mm
+    model_height_mm = total_width_mm * h / w
 
-    xs = np.linspace(0.0, params.model_width_mm, w, dtype=np.float64)
+    xs = np.linspace(0.0, total_width_mm, w, dtype=np.float64)
     ys = np.linspace(model_height_mm, 0.0, h, dtype=np.float64)
     grid_x, grid_y = np.meshgrid(xs, ys)
     z_top = params.base_thickness_mm + heightmap.astype(np.float64) * params.relief_height_mm
@@ -92,7 +95,7 @@ def build_relief_mesh(heightmap: np.ndarray, params: ReliefParams) -> trimesh.Tr
     bottom_perim_vertices[:, 2] = 0.0
     bottom_start = n_top
     center_idx = n_top + n_perim
-    center = np.array([params.model_width_mm / 2.0, model_height_mm / 2.0, 0.0])
+    center = np.array([total_width_mm / 2.0, model_height_mm / 2.0, 0.0])
 
     local = np.arange(n_perim)
     top_a = perimeter
