@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+from PIL import Image
 from scipy.ndimage import gaussian_filter
 
 from app.schemas import ReliefParams
@@ -143,6 +144,17 @@ def compute_heightmap(
     h = edge_taper(h, params.edge_taper_mm, params.model_width_mm)
     h = border_frame(h, params.border_frame_mm, params.model_width_mm)
     return np.clip(h, 0.0, 1.0).astype(np.float32)
+
+
+def luma_at_shape(source_rgb: Image.Image, shape: tuple[int, int]) -> np.ndarray:
+    """Grayscale luminance of the source image, resampled to (height, width) = shape."""
+    luma_full = np.asarray(source_rgb.convert("L"), dtype=np.float32) / 255.0
+    height, width = shape
+    if luma_full.shape == (height, width):
+        return luma_full
+    upscaling = width * height > luma_full.shape[1] * luma_full.shape[0]
+    interp = cv2.INTER_CUBIC if upscaling else cv2.INTER_AREA
+    return cv2.resize(luma_full, (width, height), interpolation=interp).astype(np.float32)
 
 
 def hillshade(
