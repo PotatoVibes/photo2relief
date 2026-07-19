@@ -189,6 +189,9 @@ def _ensure_backend(model_id: str) -> DepthBackend:
             raise DepthInferenceError(f"Unknown model_id '{model_id}'.")
         if not spec.available:
             _make_backend(spec).load("cpu")  # raises BackendUnavailableError with guidance
+            # Backstop: never fall through and load a model marked unavailable, even if
+            # its adapter's load() doesn't raise.
+            raise BackendUnavailableError(f"Model '{model_id}' is marked unavailable.")
 
         device = select_device()
         if _active_backend is not None and _active_backend.spec.model_id == model_id:
@@ -296,12 +299,15 @@ def _run_job(session_id: str, model_id: str) -> None:
             error=None,
         )
     except Exception as exc:  # noqa: BLE001 - surface any failure via status
+        # Never call anything that can raise in this handler (select_device() raises on
+        # a cuda-override misconfig) — a failure here would leave the session stuck at
+        # "processing" forever. _active_device is always a plain string.
         elapsed = round(time.monotonic() - started, 3)
         write_status(
             session_id,
             status="error",
             model_id=model_id,
-            device=select_device(),
+            device=_active_device,
             elapsed_s=elapsed,
             error=str(exc),
         )

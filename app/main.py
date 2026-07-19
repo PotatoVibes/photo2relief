@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile
@@ -24,7 +26,26 @@ from app.sessions import (
     read_meta,
 )
 
-app = FastAPI(title="Photo2Relief")
+logger = logging.getLogger("photo2relief")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # SPEC §5.1: log the chosen device and model loudly at startup.
+    cuda_available, torch_version = _torch_info()
+    device = depth.select_device()
+    logger.warning(
+        "photo2relief starting: device=%s cuda_available=%s torch=%s default_model=%s "
+        "(models lazy-load on first inference)",
+        device,
+        cuda_available,
+        torch_version,
+        resolve_default_model(device),
+    )
+    yield
+
+
+app = FastAPI(title="Photo2Relief", lifespan=_lifespan)
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 

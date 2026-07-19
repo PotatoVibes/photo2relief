@@ -110,3 +110,42 @@ def test_run_inference_reuses_cache(monkeypatch, tmp_path) -> None:
     assert calls["n"] == 1  # second call hit the cache, no backend load
     assert np.array_equal(d1, d2)
     assert depth.session_depth_path(info.session_id, "da2-small").exists()
+
+    # M2 acceptance: RE-UPLOADING the same file (new session, same content hash) must
+    # reuse the shared cache — the model is never invoked again.
+    info2 = sessions.create_session(make_solid_image_bytes(size=(32, 32)), "again.png")
+    assert info2.session_id != info.session_id
+    d3 = depth.run_inference(info2.session_id, "da2-small")
+    assert calls["n"] == 1  # still one — cross-session cache hit
+    assert np.array_equal(d1, d3)
+    assert depth.session_depth_path(info2.session_id, "da2-small").exists()
+
+
+def test_failed_job_writes_error_status(monkeypatch, tmp_path) -> None:
+    """A failing inference must land the session at status=error, never stuck at
+    processing — even if device probing is broken (regression: the error handler
+    used to call select_device(), which itself can raise)."""
+    from app import sessions
+    from app.config import settings
+    from tests.conftest import make_solid_image_bytes
+
+    monkeypatch.setattr(settings, "sessions_dir", tmp_path / "sessions")
+    settings.sessions_dir.mkdir(parents=True)
+
+    info = sessions.create_session(make_solid_image_bytes(size=(16, 16)), "x.png")
+
+    def boom(session_id, model_id):  # noqa: ANN001
+        raise depth.DepthInferenceError("model exploded")
+
+    monkeypatch.setattr(depth, "run_inference", boom)
+
+    def raising_select_device():
+        raise depth.DepthInferenceError("device probe broken too")
+
+    monkeypatch.setattr(depth, "select_device", raising_select_device)
+
+    depth._run_job(info.session_id, "da2-small")
+
+    meta = sessions.read_meta(info.session_id)
+    assert meta["status"] == "error"
+    assert "model exploded" in meta["error"]
