@@ -256,14 +256,14 @@ function syncControlsFromParams() {
 function updateDerivedSize() {
   if (!state.image) return;
   const p = state.params;
+  const modelH = (p.model_width_mm * state.image.h) / state.image.w;
   const frame = 2 * p.border_frame_mm;
-  const w = p.model_width_mm + frame;
-  const h = (p.model_width_mm * state.image.h) / state.image.w + frame;
   const thick = p.base_thickness_mm + p.relief_height_mm;
   $("derived-size").textContent =
-    `Finished part ≈ ${w} × ${h.toFixed(1)} mm (photo aspect + frame)`;
+    `Model size ≈ ${p.model_width_mm} × ${modelH.toFixed(1)} mm (from photo aspect)`;
   $("stock-size").textContent =
-    `Stock ≈ ${w} × ${h.toFixed(1)} × ${thick.toFixed(1)} mm (thickness = base + relief)`;
+    `Stock ≈ ${p.model_width_mm + frame} × ${(modelH + frame).toFixed(1)} × ` +
+    `${thick.toFixed(1)} mm (incl. frame; thickness = base + relief)`;
 }
 
 // --- model dropdown -----------------------------------------------------------------------
