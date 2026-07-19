@@ -21,6 +21,14 @@ COPY app ./app
 COPY static ./static
 RUN uv sync --frozen --extra ${TORCH_EXTRA}
 
+# DA3 worker: an isolated venv (depth_anything_3 pins numpy<2). GPU image only --
+# the CPU image's default model is da2-small and stays slim; selecting da3mono-large
+# there yields a clear BackendUnavailableError with setup instructions.
+COPY da3worker ./da3worker
+RUN if [ "${TORCH_EXTRA}" = "cu128" ]; then \
+        cd da3worker && uv sync --frozen --extra cu128; \
+    fi
+
 ENV P2R_DATA_DIR=/srv/data
 VOLUME ["/srv/data"]
 

@@ -37,7 +37,7 @@ Open **http://localhost:8090**. First run downloads the default depth model into
 
 | Model | Character | Speed | License* |
 |---|---|---|---|
-| **DA3MONO-Large** (default) | Predicts true depth → most geometrically faithful relief. Best for objects, scenes, pets. | Fast on GPU | Verify HF page (CC-BY-NC family expected) |
+| **DA3MONO-Large** (default) | Predicts true depth → most geometrically faithful relief. Best for objects, scenes, pets. Runs in an isolated worker env; ~15 s per new photo (then cached). | Fast on GPU | Apache-2.0 (HF field, 2026-07-18) |
 | **Depth Anything V2 Large** | Disparity-style output exaggerates the near field and compresses the background — often the more *artistic* bas-relief look for portraits. | Fast on GPU | CC-BY-NC 4.0 |
 | **Depth Anything V2 Small** | Lightweight fallback; the only fully Apache-2.0 option. Auto-selected when no GPU is present. | Fast even on CPU | Apache-2.0 |
 
