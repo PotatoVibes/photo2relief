@@ -18,14 +18,15 @@ def test_registry_has_three_models() -> None:
     assert MODEL_REGISTRY["da2-small"].license == "Apache-2.0"
     assert MODEL_REGISTRY["da2-small"].available is True
     assert MODEL_REGISTRY["da2-large"].available is True
-    # DA3 deferred to M2.5.
-    assert MODEL_REGISTRY["da3mono-large"].available is False
+    # M2.5: DA3 served via the isolated da3worker venv.
+    assert MODEL_REGISTRY["da3mono-large"].available is True
+    assert MODEL_REGISTRY["da3mono-large"].convention == "depth"
 
 
 def test_resolve_default_model() -> None:
     assert resolve_default_model("cpu") == "da2-small"
-    # da3mono-large unavailable in M2 → GPU default falls back to da2-large.
-    assert resolve_default_model("cuda") == "da2-large"
+    # M2.5: the SPEC default is back in effect on GPU.
+    assert resolve_default_model("cuda") == "da3mono-large"
 
 
 def test_normalize_disparity_no_flip() -> None:
@@ -56,9 +57,84 @@ def test_normalize_rejects_unknown_convention() -> None:
         depth.normalize_to_closest(np.zeros((2, 2), np.float32), "bogus")
 
 
-def test_da3_backend_reports_unavailable() -> None:
-    with pytest.raises(depth.BackendUnavailableError):
-        depth._ensure_backend("da3mono-large")
+def test_da3_missing_worker_venv_errors_clearly(monkeypatch, tmp_path) -> None:
+    """Selecting DA3 without the worker venv must raise setup guidance, not hang."""
+    monkeypatch.setattr(depth, "_da3_worker_python", lambda: tmp_path / "nope" / "python")
+    backend = depth.DA3Backend(MODEL_REGISTRY["da3mono-large"])
+    with pytest.raises(depth.BackendUnavailableError, match="uv sync"):
+        backend.load("cuda")
+
+
+def _fake_worker_run(depth_array: np.ndarray, returncode: int = 0):
+    """Build a subprocess.run stand-in that writes depth_array to the worker's out path."""
+
+    def fake_run(cmd, capture_output, text, timeout):  # noqa: ANN001, ARG001
+        out_npy = cmd[3]
+        if returncode == 0:
+            np.save(out_npy, depth_array)
+
+        class _Proc:
+            pass
+
+        p = _Proc()
+        p.returncode = returncode
+        p.stderr = "boom from worker" if returncode else ""
+        p.stdout = ""
+        return p
+
+    return fake_run
+
+
+def test_da3_backend_normalizes_worker_output(monkeypatch, tmp_path) -> None:
+    """DA3Backend must flip the worker's raw direct depth (larger = farther) so the
+    smallest raw value maps to 1.0 = closest."""
+    from PIL import Image
+
+    py = tmp_path / "python"
+    py.touch()
+    monkeypatch.setattr(depth, "_da3_worker_python", lambda: py)
+
+    raw = np.array([[1.0, 3.0], [2.0, 5.0]], dtype=np.float32)  # direct depth
+    monkeypatch.setattr(depth.subprocess, "run", _fake_worker_run(raw))
+
+    backend = depth.DA3Backend(MODEL_REGISTRY["da3mono-large"])
+    backend.load("cuda")
+    out = backend.infer(Image.new("RGB", (2, 2), (0, 0, 0)))
+    assert out[0, 0] == 1.0  # nearest (smallest raw depth)
+    assert out[1, 1] == 0.0  # farthest (largest raw depth)
+
+
+def test_da3_backend_surfaces_worker_failure(monkeypatch, tmp_path) -> None:
+    from PIL import Image
+
+    py = tmp_path / "python"
+    py.touch()
+    monkeypatch.setattr(depth, "_da3_worker_python", lambda: py)
+    monkeypatch.setattr(depth.subprocess, "run", _fake_worker_run(np.zeros((2, 2)), 1))
+
+    backend = depth.DA3Backend(MODEL_REGISTRY["da3mono-large"])
+    backend.load("cpu")
+    with pytest.raises(depth.DepthInferenceError, match="boom from worker"):
+        backend.infer(Image.new("RGB", (2, 2), (0, 0, 0)))
+
+
+def test_da3_backend_times_out(monkeypatch, tmp_path) -> None:
+    import subprocess as sp
+
+    from PIL import Image
+
+    py = tmp_path / "python"
+    py.touch()
+    monkeypatch.setattr(depth, "_da3_worker_python", lambda: py)
+
+    def hang(cmd, capture_output, text, timeout):  # noqa: ANN001, ARG001
+        raise sp.TimeoutExpired(cmd, timeout)
+
+    monkeypatch.setattr(depth.subprocess, "run", hang)
+    backend = depth.DA3Backend(MODEL_REGISTRY["da3mono-large"])
+    backend.load("cpu")
+    with pytest.raises(depth.DepthInferenceError, match="timed out"):
+        backend.infer(Image.new("RGB", (2, 2), (0, 0, 0)))
 
 
 def test_unknown_model_id_errors() -> None:

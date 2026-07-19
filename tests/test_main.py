@@ -47,7 +47,9 @@ def test_create_session_from_jpeg(portrait_jpeg_bytes: bytes, _stub_inference) -
     assert body["session_id"]
     # Inference was scheduled for a valid registry model.
     assert len(_stub_inference) == 1
-    assert _stub_inference[0][1] in {"da2-small", "da2-large"}
+    from app.config import MODEL_REGISTRY
+
+    assert _stub_inference[0][1] in MODEL_REGISTRY
 
 
 def test_create_session_from_png(gradient_png_bytes: bytes) -> None:

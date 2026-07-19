@@ -8,7 +8,10 @@ nothing downstream needs to know which model produced the depth.
 
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -134,30 +137,74 @@ class TransformersDA2Backend:
         self._pipe = None
 
 
-class DA3Backend:
-    """depth_anything_3 adapter — DEFERRED to M2.5.
+DA3_WORKER_DIR = Path(__file__).resolve().parent.parent / "da3worker"
+DA3_WORKER_TIMEOUT_S = 600  # generous: first-ever run may download ~1.3 GB of weights
 
-    The ``depth_anything_3`` package (v0.1.1) pins ``numpy<2`` and pulls open3d, xformers,
-    pycolmap, moviepy, and gsplat, which conflict hard with this project's numpy-2 /
-    trimesh / opencv stack. Wiring it needs subprocess isolation; deferred per the SPEC
-    risk table. The adapter stays here so the registry/protocol wiring is real.
+
+def _da3_worker_python() -> Path:
+    """Path to the isolated worker venv's interpreter (Windows or POSIX layout)."""
+    win = DA3_WORKER_DIR / ".venv" / "Scripts" / "python.exe"
+    posix = DA3_WORKER_DIR / ".venv" / "bin" / "python"
+    return win if os.name == "nt" else posix
+
+
+class DA3Backend:
+    """depth_anything_3 via subprocess isolation (M2.5).
+
+    The ``depth_anything_3`` package pins ``numpy<2`` and pulls open3d/xformers/pycolmap,
+    which conflict with this project's numpy-2 stack — so it lives in its own venv
+    (``da3worker/``) and we shell out per inference. Raw depth comes back via a temp
+    ``.npy``; convention normalization happens here in the main app. Cost is ~15 s per
+    call on the dev box (venv import + model load dominate), paid once per (image,
+    model) thanks to the depth cache. Nothing stays resident in this process, so
+    unload() is a no-op and idle VRAM is zero.
     """
 
     def __init__(self, spec: ModelSpec) -> None:
         self.spec = spec
+        self._device = "cpu"
 
-    def load(self, device: str) -> None:  # noqa: ARG002
-        raise BackendUnavailableError(
-            f"Model '{self.spec.model_id}' (DA3 backend) is not available yet — deferred "
-            "to M2.5 because depth_anything_3 conflicts with the project dependency set. "
-            "Use 'da2-large' or 'da2-small'."
-        )
+    def load(self, device: str) -> None:
+        py = _da3_worker_python()
+        if not py.exists():
+            extra = "cu128" if device == "cuda" else "cpu"
+            raise BackendUnavailableError(
+                f"Model '{self.spec.model_id}' needs the DA3 worker venv, which is missing. "
+                f"Create it with: cd da3worker && uv sync --extra {extra}"
+            )
+        self._device = device
 
-    def infer(self, image: Image.Image) -> np.ndarray:  # noqa: ARG002
-        raise BackendUnavailableError(f"Model '{self.spec.model_id}' is not available.")
+    def infer(self, image: Image.Image) -> np.ndarray:
+        with tempfile.TemporaryDirectory(prefix="p2r_da3_") as tmp:
+            in_png = Path(tmp) / "in.png"
+            out_npy = Path(tmp) / "out.npy"
+            image.save(in_png, format="PNG")
+            cmd = [
+                str(_da3_worker_python()),
+                str(DA3_WORKER_DIR / "worker.py"),
+                str(in_png),
+                str(out_npy),
+                "--device",
+                self._device,
+                "--model",
+                self.spec.weights,
+            ]
+            try:
+                proc = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=DA3_WORKER_TIMEOUT_S
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise DepthInferenceError(
+                    f"DA3 worker timed out after {DA3_WORKER_TIMEOUT_S}s."
+                ) from exc
+            if proc.returncode != 0 or not out_npy.exists():
+                detail = (proc.stderr or proc.stdout or "no output").strip()[-2000:]
+                raise DepthInferenceError(f"DA3 worker failed: {detail}")
+            raw = np.load(out_npy)
+        return normalize_to_closest(raw, self.spec.convention)
 
     def unload(self) -> None:
-        pass
+        pass  # nothing resident — the worker process exits after each call
 
 
 def _make_backend(spec: ModelSpec) -> DepthBackend:

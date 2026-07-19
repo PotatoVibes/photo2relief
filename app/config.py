@@ -71,9 +71,9 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         weights="depth-anything/DA3MONO-LARGE",
         backend="da3",
         convention="depth",
-        license="CC-BY-NC (verify HF page)",
+        license="Apache-2.0",  # per the HF license field, checked 2026-07-18
         role="Geometric fidelity (direct depth). Best true-to-life proportions.",
-        available=False,  # M2.5: depth_anything_3 pins numpy<2 + open3d/xformers — deferred
+        available=True,  # M2.5: served by the isolated da3worker venv (subprocess)
     ),
     "da2-large": ModelSpec(
         model_id="da2-large",
@@ -99,8 +99,9 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
 def resolve_default_model(device: str) -> str:
     """The model auto-selected when the user hasn't chosen one.
 
-    SPEC default is ``da3mono-large``, but the DA3 backend is deferred to M2.5, so on
-    GPU we fall back to the best *available* model (``da2-large``); on CPU, ``da2-small``.
+    GPU → the SPEC default (``da3mono-large``, overridable via P2R_DEFAULT_MODEL_ID),
+    falling back to ``da2-large`` if the configured default is unavailable.
+    CPU → ``da2-small`` (the fast Apache-licensed fallback), per SPEC §5.1.1.
     """
     if device != "cuda":
         return "da2-small"

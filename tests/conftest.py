@@ -47,3 +47,39 @@ def make_solid_image_bytes(fmt: str = "PNG", size: tuple[int, int] = (100, 100))
     buf = io.BytesIO()
     img.save(buf, format=fmt)
     return buf.getvalue()
+
+
+def make_sphere_image_bytes(size: tuple[int, int] = (256, 320)) -> bytes:
+    """A shaded sphere on a flat background — a synthetic 'portrait' whose subject any
+    depth model must read as nearer than the corners. Used to verify conventions."""
+    w, h = size
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    dx = (xx - w * 0.5) / (min(w, h) * 0.34)
+    dy = (yy - h * 0.52) / (min(w, h) * 0.34)
+    r2 = dx * dx + dy * dy
+    inside = r2 < 1.0
+    dz = np.sqrt(np.clip(1.0 - r2, 0.0, 1.0))
+    shade = np.clip(-0.4 * dx - 0.5 * dy + 0.75 * dz, 0.0, 1.0)
+    img = np.full((h, w), 0.35, dtype=np.float32)
+    img[inside] = 0.25 + 0.7 * shade[inside]
+    rgb = (np.stack([img, img * 0.95, img * 0.88], axis=-1).clip(0, 1) * 255).astype("uint8")
+    buf = io.BytesIO()
+    Image.fromarray(rgb, "RGB").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def region_means(depth: np.ndarray) -> tuple[float, float]:
+    """(center mean, corner mean) of a depth map — for subject-vs-background checks."""
+    h, w = depth.shape
+    center = float(depth[int(h * 0.35) : int(h * 0.70), int(w * 0.35) : int(w * 0.65)].mean())
+    corners = float(
+        np.mean(
+            [
+                depth[: h // 6, : w // 6].mean(),
+                depth[: h // 6, -w // 6 :].mean(),
+                depth[-h // 6 :, : w // 6].mean(),
+                depth[-h // 6 :, -w // 6 :].mean(),
+            ]
+        )
+    )
+    return center, corners
