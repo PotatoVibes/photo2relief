@@ -7,6 +7,7 @@ a status dict, same pattern as depth.py's inference jobs.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 import uuid
@@ -18,7 +19,9 @@ from PIL import Image
 
 from app import depth, heightmap, meshing
 from app.schemas import ReliefParams
-from app.sessions import SOURCE_IMAGE_NAME, session_dir
+from app.sessions import SOURCE_IMAGE_NAME, read_meta, session_dir
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._ -]")
 
 
 @dataclass
@@ -65,6 +68,13 @@ def _fmt_dim_mm(mm: float) -> str:
     return str(int(rounded)) if rounded == int(rounded) else str(rounded)
 
 
+def _export_stem(original_filename: str) -> str:
+    """Base the export filename on the uploaded photo's name, not the session id."""
+    stem = Path(original_filename).stem.strip()
+    cleaned = _UNSAFE_FILENAME_CHARS.sub("_", stem)
+    return cleaned or "photo2relief"
+
+
 def _set_progress(job: ExportJob, progress: float, stage: str) -> None:
     with _lock:
         job.progress = progress
@@ -92,8 +102,9 @@ def _run_export(job: ExportJob, params: ReliefParams) -> None:
 
         # Physical dims include the border frame (total_width_mm), matching the mesh.
         model_height_mm = params.total_width_mm * h.shape[0] / h.shape[1]
+        stem = _export_stem(read_meta(job.session_id).get("original_filename") or "")
         filename = (
-            f"photo2relief_{job.session_id}_"
+            f"{stem}_"
             f"{_fmt_dim_mm(params.total_width_mm)}x{_fmt_dim_mm(model_height_mm)}mm."
             f"{params.output_format}"
         )
