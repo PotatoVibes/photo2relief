@@ -1,0 +1,16 @@
+services:
+  photo2relief:
+    image: photo2relief:gpu
+    build:
+      context: .
+      args:
+        TORCH_EXTRA: cu128
+    environment:
+      - P2R_DEVICE=auto
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

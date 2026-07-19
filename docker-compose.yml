@@ -1,0 +1,17 @@
+services:
+  photo2relief:
+    build: .
+    image: photo2relief:cpu
+    ports:
+      - "${P2R_PORT:-8090}:8090"
+    environment:
+      - P2R_PORT=8090
+      - P2R_DEVICE=cpu
+    volumes:
+      - ./data/sessions:/srv/data/sessions
+      - ./data/models:/srv/data/models
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
