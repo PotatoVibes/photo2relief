@@ -143,10 +143,23 @@ async def session_status(session_id: str):
         device=meta.get("device"),
         elapsed_s=meta.get("elapsed_s"),
         error=meta.get("error"),
+        eta_s=depth.estimate_inference_s(meta.get("model_id"), meta.get("device")),
         width=meta.get("width"),
         height=meta.get("height"),
         original_filename=meta.get("original_filename"),
     )
+
+
+@app.get(
+    "/api/sessions/{session_id}/source",
+    responses={404: {"model": ErrorResponse}},
+)
+async def session_source(session_id: str):
+    """The normalized session image (upload-area thumbnail; works across resume)."""
+    path = session_dir(session_id) / SOURCE_IMAGE_NAME
+    if not path.exists():
+        return _not_found(session_id)
+    return FileResponse(path=path, media_type="image/png")
 
 
 @app.get(

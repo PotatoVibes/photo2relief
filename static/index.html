@@ -25,7 +25,8 @@
     <main id="app">
       <aside class="sidebar">
         <section class="card" id="upload-card">
-          <label id="dropzone" for="file-input">
+          <label id="dropzone" for="file-input" title="Drop or click to replace the photo">
+            <img id="dropzone-thumb" alt="" hidden />
             <span id="dropzone-text">Drop a photo here or click to choose</span>
             <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
           </label>

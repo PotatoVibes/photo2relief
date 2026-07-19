@@ -8,6 +8,7 @@ nothing downstream needs to know which model produced the depth.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -266,6 +267,51 @@ def _free_cuda() -> None:
         pass
 
 
+# --- inference-time history (drives the UI's depth ETA) ----------------------------
+
+_times_lock = threading.Lock()
+
+
+def _times_path() -> Path:
+    return settings.cache_dir / "inference_times.json"
+
+
+def record_inference_time(model_id: str, device: str, seconds: float) -> None:
+    """Persist the last *real* inference duration per (model, device).
+
+    Only cache misses are recorded (see run_inference) -- a cache hit takes
+    milliseconds and would poison the estimate for the next new photo.
+    """
+    with _times_lock:
+        data: dict[str, float] = {}
+        path = _times_path()
+        if path.exists():
+            try:
+                data = json.loads(path.read_text())
+            except ValueError:
+                data = {}
+        data[f"{model_id}|{device}"] = round(seconds, 3)
+        path.write_text(json.dumps(data, indent=2))
+
+
+def estimate_inference_s(model_id: str | None, device: str | None) -> float | None:
+    """Last measured duration for (model, device), or None if never measured.
+
+    Honest by construction: no hardcoded guesses -- a first-ever run simply has
+    no ETA and the UI shows plain elapsed time.
+    """
+    if model_id is None or device is None:
+        return None
+    path = _times_path()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except ValueError:
+        return None
+    return data.get(f"{model_id}|{device}")
+
+
 # --- caching + inference ----------------------------------------------------------
 
 
@@ -314,8 +360,10 @@ def run_inference(session_id: str, model_id: str) -> np.ndarray:
         img = img.convert("RGB")
         infer_img = _downscale_for_inference(img)
         with _lock:
+            infer_started = time.monotonic()
             backend = _ensure_backend(model_id)
             depth = backend.infer(infer_img)
+            record_inference_time(model_id, _active_device, time.monotonic() - infer_started)
 
     depth = np.ascontiguousarray(depth.astype(np.float32))
     np.save(cache_path, depth)

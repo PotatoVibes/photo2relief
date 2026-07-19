@@ -315,7 +315,6 @@ async function createSession(file) {
   setPill("busy", "Uploading…");
   setBusy("2d", "Uploading photo…");
   setBusy("3d", "Uploading photo…");
-  $("dropzone-text").textContent = file.name;
   const form = new FormData();
   form.append("image", file);
   try {
@@ -336,7 +335,11 @@ async function enterSession(sessionId, image, filename) {
   state.lastExport = null;
   localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
   $("image-info").textContent = `${filename} — ${image.w} × ${image.h} px`;
-  $("dropzone-text").textContent = filename;
+  // Thumbnail replaces the dropzone prompt (the info line already carries the name).
+  const thumb = $("dropzone-thumb");
+  thumb.src = `/api/sessions/${sessionId}/source`;
+  thumb.hidden = false;
+  $("dropzone-text").hidden = true;
 
   // params.json holds this session's tuned values (server-seeded defaults when new).
   state.params = await (await api(`/api/sessions/${sessionId}/params`)).json();
@@ -381,7 +384,11 @@ async function waitForDepth() {
       return;
     }
     const elapsed = Math.round((Date.now() - startedAt) / 1000);
-    const msg = `Estimating depth (${s.model_id ?? "…"} on ${s.device ?? "…"})… ${elapsed}s`;
+    // eta_s is the last MEASURED duration for this model+device (no guesswork);
+    // a first-ever run has none, so we show plain elapsed time.
+    const eta = s.eta_s ? Math.max(Math.round(s.eta_s), elapsed) : null;
+    const timing = eta ? `${elapsed}s / ~${eta}s` : `${elapsed}s`;
+    const msg = `Estimating depth (${s.model_id ?? "…"} on ${s.device ?? "…"})… ${timing}`;
     setPill("busy", "Estimating depth…");
     setBusy("2d", msg);
     setBusy("3d", msg);

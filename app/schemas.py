@@ -86,6 +86,9 @@ class StatusResponse(BaseModel):
     device: str | None
     elapsed_s: float | None
     error: str | None
+    # Last measured inference duration for this (model, device) -- the UI's depth ETA.
+    # None until a first real inference has ever been timed.
+    eta_s: float | None = None
     # Session identity, so a reloaded page can resume without re-uploading.
     width: int | None = None
     height: int | None = None

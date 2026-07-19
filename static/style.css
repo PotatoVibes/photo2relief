@@ -107,6 +107,13 @@ header h1 { margin: 0; font-size: 18px; }
 }
 #dropzone:hover, #dropzone.dragover { border-color: var(--accent); color: var(--text); }
 #file-input { display: none; }
+#dropzone-thumb {
+  display: block;
+  max-height: 64px;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 6px;
+}
 
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
 .control-hint { color: var(--muted); font-size: 11px; margin: 2px 0 0; line-height: 1.35; }

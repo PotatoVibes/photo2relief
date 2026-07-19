@@ -303,6 +303,36 @@ def test_status_endpoint_carries_session_identity_for_resume(portrait_jpeg_bytes
     assert body["original_filename"] == "portrait.jpg"
 
 
+def test_session_source_serves_the_normalized_image(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    res = client.get(f"/api/sessions/{session_id}/source")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "image/png"
+    img = Image.open(io.BytesIO(res.content))
+    assert img.size == (400, 600)
+
+
+def test_session_source_404_for_unknown_session() -> None:
+    assert client.get("/api/sessions/deadbeef/source").status_code == 404
+
+
+def test_status_eta_comes_from_recorded_inference_times(
+    portrait_jpeg_bytes: bytes, tmp_path, monkeypatch
+) -> None:
+    """The depth ETA is the last *measured* duration for (model, device) -- no
+    hardcoded guesses. Unmeasured combinations report eta_s = None."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "cache_dir", tmp_path)
+    session_id = _create_session(portrait_jpeg_bytes)
+    model_id = client.get(f"/api/sessions/{session_id}/status").json()["model_id"]
+
+    assert client.get(f"/api/sessions/{session_id}/status").json()["eta_s"] is None
+
+    depth.record_inference_time(model_id, "cpu", 17.5)  # stub writes device="cpu"
+    assert client.get(f"/api/sessions/{session_id}/status").json()["eta_s"] == 17.5
+
+
 # --- preview/mesh ------------------------------------------------------------------------
 
 
