@@ -93,3 +93,20 @@ class JobStatusResponse(BaseModel):
     status: str  # "processing" | "ready" | "error"
     error: str | None
     download_url: str | None
+    # Populated once ready -- feeds the UI's export summary line (SPEC §5.4).
+    triangles: int | None = None
+    file_bytes: int | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+
+
+class ModelInfo(BaseModel):
+    model_id: str
+    role: str
+    license: str
+    available: bool
+
+
+class ModelsResponse(BaseModel):
+    models: list[ModelInfo]
+    default_model: str  # the id auto-selected for this device

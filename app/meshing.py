@@ -143,7 +143,8 @@ def build_export_mesh(heightmap: np.ndarray, params: ReliefParams) -> trimesh.Tr
 
 
 def export_bytes(mesh: trimesh.Trimesh, output_format: str) -> bytes:
-    """Serialize to binary STL or OBJ. Units are millimeters (STL itself is unitless --
-    the README documents selecting millimeters on Fusion import)."""
+    """Serialize to binary STL, OBJ, or glb (three.js preview). Units are millimeters
+    (STL itself is unitless -- the README documents selecting millimeters on Fusion
+    import)."""
     data = mesh.export(file_type=output_format)
     return data if isinstance(data, bytes) else data.encode("utf-8")

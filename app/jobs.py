@@ -30,6 +30,11 @@ class ExportJob:
     file_path: Path | None = None
     filename: str | None = None
     elapsed_s: float | None = None
+    # Export summary (SPEC §5.4): triangle count, file size, physical dims.
+    triangles: int | None = None
+    file_bytes: int | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
 
 
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="export")
@@ -81,6 +86,10 @@ def _run_export(job: ExportJob, params: ReliefParams) -> None:
             # never observe "ready" while file_path/filename are still None.
             job.file_path = out_path
             job.filename = filename
+            job.triangles = len(mesh.faces)
+            job.file_bytes = len(data)
+            job.width_mm = params.model_width_mm
+            job.height_mm = round(model_height_mm, 2)
             job.elapsed_s = round(time.monotonic() - started, 3)
             job.status = "ready"
     except Exception as exc:  # noqa: BLE001 - surface any failure via job status

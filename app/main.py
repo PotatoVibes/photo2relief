@@ -13,14 +13,16 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
-from app import depth, heightmap, jobs
-from app.config import resolve_default_model
+from app import depth, heightmap, jobs, meshing
+from app.config import MODEL_REGISTRY, resolve_default_model
 from app.schemas import (
     ErrorResponse,
     ExportJobResponse,
     HealthResponse,
     ImageInfo,
     JobStatusResponse,
+    ModelInfo,
+    ModelsResponse,
     ReliefParams,
     SessionCreateResponse,
     StatusResponse,
@@ -39,6 +41,7 @@ from app.sessions import (
 logger = logging.getLogger("photo2relief")
 
 PREVIEW_MAX_PX = 1024  # SPEC §4: preview PNG capped at ≤ 1024 px
+PREVIEW_MESH_MAX_PX = 256  # SPEC §4: 3D preview grid hard-capped at 256 (long side)
 
 
 def _error(status_code: int, error: str, detail: str) -> JSONResponse:
@@ -215,6 +218,51 @@ async def preview_heightmap(session_id: str, grayscale: bool = False):
     return Response(content=_encode_png_l(render), media_type="image/png")
 
 
+@app.get("/api/models", response_model=ModelsResponse)
+async def list_models() -> ModelsResponse:
+    """Registry contents for the UI's depth-model dropdown (SPEC §5.1.1)."""
+    return ModelsResponse(
+        models=[
+            ModelInfo(model_id=s.model_id, role=s.role, license=s.license, available=s.available)
+            for s in MODEL_REGISTRY.values()
+        ],
+        default_model=resolve_default_model(depth.select_device()),
+    )
+
+
+@app.post(
+    "/api/sessions/{session_id}/preview/mesh",
+    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}},
+)
+async def preview_mesh(session_id: str, params: ReliefParams):
+    """Reduced-res relief as binary glTF for the three.js viewport (SPEC §4: grid long
+    side ≤ 256, includes base, target < 2 s CPU). Params come in the body -- unlike the
+    2D preview, this doesn't read params.json, so a slider drag can preview un-saved
+    values. No decimation and no watertight gate here: the preview never ships to CAM,
+    and skipping validation keeps the refresh snappy."""
+    try:
+        read_meta(session_id)
+    except SessionNotFoundError:
+        return _not_found(session_id)
+
+    depth_path = depth.session_depth_path(session_id, params.depth_model)
+    if not depth_path.exists():
+        return _error(
+            409,
+            "depth_not_ready",
+            f"Depth for model '{params.depth_model}' isn't ready yet for this session; "
+            "poll /status.",
+        )
+
+    raw_depth = np.load(depth_path)
+    with Image.open(session_dir(session_id) / SOURCE_IMAGE_NAME) as img:
+        luma = heightmap.luma_at_shape(img.convert("RGB"), raw_depth.shape)
+
+    h = heightmap.compute_heightmap(raw_depth, luma, params, target_long_side=PREVIEW_MESH_MAX_PX)
+    mesh = meshing.build_relief_mesh(h, params)
+    return Response(content=meshing.export_bytes(mesh, "glb"), media_type="model/gltf-binary")
+
+
 @app.post(
     "/api/sessions/{session_id}/export",
     response_model=ExportJobResponse,
@@ -253,6 +301,10 @@ async def job_status(job_id: str):
         status=job.status,
         error=job.error,
         download_url=f"/api/jobs/{job_id}/download" if job.status == "ready" else None,
+        triangles=job.triangles,
+        file_bytes=job.file_bytes,
+        width_mm=job.width_mm,
+        height_mm=job.height_mm,
     )
 
 

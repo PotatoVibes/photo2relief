@@ -277,6 +277,75 @@ def test_preview_heightmap_completes_quickly(portrait_jpeg_bytes: bytes) -> None
     assert elapsed < 0.3  # SPEC M3 accept: previews return in < 300 ms
 
 
+# --- models ------------------------------------------------------------------------------
+
+
+def test_models_endpoint_lists_registry() -> None:
+    from app.config import MODEL_REGISTRY
+
+    res = client.get("/api/models")
+    assert res.status_code == 200
+    body = res.json()
+    assert {m["model_id"] for m in body["models"]} == set(MODEL_REGISTRY)
+    assert body["default_model"] in MODEL_REGISTRY
+    for m in body["models"]:
+        assert m["role"] and m["license"]
+
+
+# --- preview/mesh ------------------------------------------------------------------------
+
+
+def test_preview_mesh_404_for_unknown_session() -> None:
+    res = client.post("/api/sessions/deadbeef/preview/mesh", json={})
+    assert res.status_code == 404
+
+
+def test_preview_mesh_409_when_depth_not_ready(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    res = client.post(f"/api/sessions/{session_id}/preview/mesh", json={})
+    assert res.status_code == 409
+    assert res.json()["error"] == "depth_not_ready"
+
+
+def test_preview_mesh_returns_glb_capped_at_256(portrait_jpeg_bytes: bytes) -> None:
+    session_id = _create_session(portrait_jpeg_bytes)
+    params = client.get(f"/api/sessions/{session_id}/params").json()
+    _write_fake_depth(session_id, params["depth_model"], shape=(600, 400))
+
+    res = client.post(f"/api/sessions/{session_id}/preview/mesh", json=params)
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "model/gltf-binary"
+    assert res.content.startswith(b"glTF")
+
+    import trimesh
+
+    scene = trimesh.load(io.BytesIO(res.content), file_type="glb")
+    mesh = scene.to_geometry()
+    # Grid long side hard-capped at 256 vertices: top grid 256x171 + perimeter ring + center.
+    n_perim = 2 * (256 + 171) - 4
+    assert len(mesh.vertices) == 256 * 171 + n_perim + 1
+    # Physical size survives the glb round trip (mm).
+    assert mesh.bounds[1][0] == pytest.approx(params["model_width_mm"], abs=0.01)
+
+
+def test_preview_mesh_uses_body_params_not_saved_ones(portrait_jpeg_bytes: bytes) -> None:
+    """The 3D preview must reflect the params in the request body (a mid-drag slider
+    value), not whatever params.json last persisted."""
+    session_id = _create_session(portrait_jpeg_bytes)
+    params = client.get(f"/api/sessions/{session_id}/params").json()
+    _write_fake_depth(session_id, params["depth_model"], shape=(96, 64))
+
+    params["model_width_mm"] = 321.0
+    res = client.post(f"/api/sessions/{session_id}/preview/mesh", json=params)
+
+    import trimesh
+
+    mesh = trimesh.load(io.BytesIO(res.content), file_type="glb").to_geometry()
+    assert mesh.bounds[1][0] == pytest.approx(321.0, abs=0.01)
+    # ...and the saved params were NOT clobbered by a preview call.
+    assert client.get(f"/api/sessions/{session_id}/params").json()["model_width_mm"] == 150.0
+
+
 # --- export / jobs -----------------------------------------------------------------------
 
 
@@ -317,6 +386,11 @@ def test_export_full_flow_produces_downloadable_stl(portrait_jpeg_bytes: bytes) 
     status = _poll_job(job_id)
     assert status["status"] == "ready"
     assert status["download_url"] == f"/api/jobs/{job_id}/download"
+    # Summary fields for the UI's export summary line (SPEC §5.4).
+    assert status["triangles"] > 0
+    assert status["file_bytes"] > 0
+    assert status["width_mm"] == params["model_width_mm"]
+    assert status["height_mm"] == pytest.approx(params["model_width_mm"] * 96 / 64, abs=0.5)
 
     download = client.get(status["download_url"])
     assert download.status_code == 200
