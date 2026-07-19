@@ -3,7 +3,11 @@ services:
     build: .
     image: photo2relief:cpu
     ports:
-      - "${P2R_PORT:-8090}:8090"
+      # Bind to localhost only: this is an unauthenticated single-user app (see README
+      # "Security & scope"). Publishing to 0.0.0.0 would expose file upload + compute to
+      # anyone who can reach the host. Change the "127.0.0.1" prefix only if you know you
+      # want LAN/remote access and have put auth in front of it.
+      - "127.0.0.1:${P2R_PORT:-8090}:8090"
     environment:
       - P2R_PORT=8090
       - P2R_DEVICE=cpu

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,13 @@ ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF"}
 SOURCE_IMAGE_NAME = "source.png"
 META_FILE_NAME = "meta.json"
 PARAMS_FILE_NAME = "params.json"
+
+# Session ids are uuid4().hex — exactly 32 lowercase hex chars. Everything else is
+# rejected before it can touch the filesystem, so a hand-crafted id (e.g. "..") can
+# never be joined into a path that escapes the sessions dir. Defense-in-depth: the
+# FastAPI path param can't contain "/" either, but validating here is cheap and makes
+# the guarantee explicit rather than relying on framework routing behavior.
+_SESSION_ID_RE = re.compile(r"\A[0-9a-f]{32}\Z")
 
 
 _meta_lock = Lock()
@@ -48,6 +56,11 @@ class SessionInfo:
 
 
 def session_dir(session_id: str) -> Path:
+    # Reject any id that isn't a canonical session id *before* it reaches a path join,
+    # so a malformed/hostile id can never escape sessions_dir. A bad id maps to no real
+    # session, so SessionNotFoundError is the right signal (endpoints already 404 it).
+    if not _SESSION_ID_RE.match(session_id):
+        raise SessionNotFoundError(session_id)
     return settings.sessions_dir / session_id
 
 

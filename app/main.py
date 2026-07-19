@@ -156,7 +156,10 @@ async def session_status(session_id: str):
 )
 async def session_source(session_id: str):
     """The normalized session image (upload-area thumbnail; works across resume)."""
-    path = session_dir(session_id) / SOURCE_IMAGE_NAME
+    try:
+        path = session_dir(session_id) / SOURCE_IMAGE_NAME
+    except SessionNotFoundError:
+        return _not_found(session_id)
     if not path.exists():
         return _not_found(session_id)
     return FileResponse(path=path, media_type="image/png")

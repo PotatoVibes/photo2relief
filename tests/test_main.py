@@ -145,6 +145,38 @@ def test_status_endpoint_404_for_unknown_session() -> None:
     assert res.json()["error"] == "not_found"
 
 
+def test_session_dir_rejects_non_canonical_ids() -> None:
+    """A hostile/malformed id must never be joined into a filesystem path.
+
+    session_dir is the single choke point for turning an id into a path, so validating
+    there protects every current and future endpoint. A bad id raises SessionNotFoundError
+    (endpoints turn that into a 404) rather than returning a path that could escape.
+    """
+    from app.sessions import SessionNotFoundError, session_dir
+
+    hostile = [
+        "..",
+        "../../etc/passwd",
+        "..\\..\\windows",
+        "abc",  # too short
+        "g" * 32,  # right length, not hex
+        "A" * 32,  # uppercase (uuid4().hex is lowercase)
+        "",
+    ]
+    for bad in hostile:
+        with pytest.raises(SessionNotFoundError):
+            session_dir(bad)
+
+
+def test_endpoints_404_on_traversal_style_id() -> None:
+    # A non-hex id reaching a handler is rejected as "no such session", not a 500 or a
+    # file read outside the sessions dir.
+    for path in ("status", "params", "source"):
+        res = client.get(f"/api/sessions/{'z' * 32}/{path}")
+        assert res.status_code == 404, path
+        assert res.json()["error"] == "not_found"
+
+
 # --- params -------------------------------------------------------------------------
 
 
