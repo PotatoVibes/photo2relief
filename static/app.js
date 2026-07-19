@@ -10,23 +10,33 @@ const state = {
   sessionId: null,
   image: null, // {w, h}
   params: null, // ReliefParams, mirrors the sliders
-  defaults: null, // snapshot of the session's server-seeded defaults (Reset button)
+  defaults: null, // canonical device defaults from /api/models (Reset button)
   depthReady: false,
   readyModel: null, // the depth_model whose raw depth is confirmed cached
   models: [], // registry from /api/models
+  lastExport: null, // {key, jobId, downloadUrl} — reuse instead of re-meshing
 };
 
 const DEBOUNCE_2D_MS = 300; // SPEC §5.4
 const DEBOUNCE_3D_MS = 800;
+const SESSION_STORAGE_KEY = "p2r_session_id";
 
 // --- parameter table (ranges mirror ReliefParams in app/schemas.py) --------------------
+// Tab layout per owner feedback: Size | Shaping (depth + surface) | Export.
 
 const PARAM_GROUPS = {
   "group-size": [
     { id: "model_width_mm", label: "Width (mm)", min: 10, max: 1000, step: 1 },
     { id: "relief_height_mm", label: "Relief height (mm)", min: 0.5, max: 100, step: 0.5 },
     { id: "base_thickness_mm", label: "Base thickness (mm)", min: 0.5, max: 50, step: 0.5 },
-    { id: "border_frame_mm", label: "Border frame (mm)", min: 0, max: 50, step: 0.5 },
+    {
+      id: "border_frame_mm",
+      label: "Border frame (mm)",
+      min: 0,
+      max: 50,
+      step: 0.5,
+      hint: "Flat margin at full stock height (base + relief) around the image — a machinable clamping/reference edge.",
+    },
   ],
   "group-depth": [
     { id: "invert_depth", label: "Invert depth (intaglio / mold)", type: "bool" },
@@ -34,17 +44,38 @@ const PARAM_GROUPS = {
     { id: "depth_floor", label: "Depth floor (clip far)", min: 0, max: 1, step: 0.01 },
     { id: "depth_ceiling", label: "Depth ceiling (clip near)", min: 0, max: 1, step: 0.01 },
     { id: "flatten_background", label: "Flatten background", type: "bool" },
-    { id: "background_threshold", label: "Background threshold", min: 0, max: 1, step: 0.01 },
+    {
+      id: "background_threshold",
+      label: "Background threshold",
+      min: 0,
+      max: 0.5,
+      step: 0.005,
+      hint: "Useful values are usually small (0.01–0.1); the slider covers 0–0.5 in fine steps.",
+    },
   ],
   "group-surface": [
     { id: "smoothing", label: "Smoothing (σ px)", min: 0, max: 10, step: 0.1 },
     { id: "edge_preserve", label: "Edge-preserving (bilateral)", type: "bool" },
-    { id: "detail_blend", label: "Detail blend (luminance)", min: 0, max: 1, step: 0.01 },
+    {
+      id: "detail_blend",
+      label: "Detail blend (luminance)",
+      min: 0,
+      max: 1,
+      step: 0.01,
+      hint: "Adds fine texture (hair, fabric) from the photo's brightness on top of the depth shape.",
+    },
     { id: "edge_taper_mm", label: "Edge taper (mm)", min: 0, max: 50, step: 0.5 },
   ],
   "group-export": [
     { id: "resolution", label: "Resolution (grid long side)", type: "enum", options: [512, 1024, 2048] },
-    { id: "decimate_ratio", label: "Decimation ratio", min: 0, max: 0.95, step: 0.05 },
+    {
+      id: "decimate_ratio",
+      label: "Decimation ratio",
+      min: 0,
+      max: 0.95,
+      step: 0.05,
+      hint: "Fraction of triangles removed to shrink the file (0.5 ≈ half as many). 0 = off; Fusion + CAM handle full meshes fine.",
+    },
     { id: "output_format", label: "Format", type: "enum", options: ["stl", "obj"] },
   ],
 };
@@ -73,6 +104,13 @@ function showError(message) {
   banner.hidden = !message;
 }
 
+// Regeneration feedback lives on the previews themselves (owner feedback: the header
+// pill is too far from where the user is looking). null message hides the overlay.
+function setBusy(which, message) {
+  $(`busy${which}`).hidden = !message;
+  if (message) $(`busy${which}-text`).textContent = message;
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, options);
   if (!res.ok) {
@@ -90,19 +128,39 @@ async function api(path, options = {}) {
   return res;
 }
 
+// --- tabs ------------------------------------------------------------------------------
+
+function wireTabs() {
+  const tabs = [...document.querySelectorAll(".tab")];
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      for (const t of tabs) {
+        t.classList.toggle("active", t === tab);
+        $(t.dataset.tab).hidden = t !== tab;
+      }
+    });
+  }
+}
+
 // --- parameter controls ------------------------------------------------------------------
 
 function buildControls() {
   for (const [groupId, specs] of Object.entries(PARAM_GROUPS)) {
     const container = $(groupId);
     for (const spec of specs) {
-      container.appendChild(
+      const el =
         spec.type === "bool"
           ? buildCheckbox(spec)
           : spec.type === "enum"
             ? buildSelect(spec)
-            : buildSlider(spec)
-      );
+            : buildSlider(spec);
+      container.appendChild(el);
+      if (spec.hint) {
+        const p = document.createElement("p");
+        p.className = "control-hint";
+        p.textContent = spec.hint;
+        container.appendChild(p);
+      }
     }
   }
 }
@@ -123,7 +181,6 @@ function buildSlider(spec) {
     el.min = spec.min;
     el.max = spec.max;
     el.step = spec.step;
-    el.dataset.param = spec.id;
   }
   range.id = spec.id;
   const commit = (value) => {
@@ -201,7 +258,7 @@ function updateDerivedSize() {
   const h = (state.params.model_width_mm * state.image.h) / state.image.w;
   $("derived-size").textContent =
     `Physical size ≈ ${state.params.model_width_mm} × ${h.toFixed(1)} mm ` +
-    `(height follows the photo's aspect ratio)`;
+    `(height follows the photo's aspect ratio; a border frame adds to both)`;
 }
 
 // --- model dropdown -----------------------------------------------------------------------
@@ -209,6 +266,7 @@ function updateDerivedSize() {
 async function loadModels() {
   const body = await (await api("/api/models")).json();
   state.models = body.models;
+  state.defaults = body.default_params;
   const sel = $("depth_model");
   for (const m of body.models) {
     const o = document.createElement("option");
@@ -219,6 +277,7 @@ async function loadModels() {
   }
   sel.addEventListener("change", () => {
     updateModelHint();
+    // Only the model changes — every tuned slider value is kept as-is.
     onParamChanged("depth_model", sel.value);
   });
 }
@@ -249,27 +308,55 @@ function wireUpload() {
 async function createSession(file) {
   showError("");
   setPill("busy", "Uploading…");
+  setBusy("2d", "Uploading photo…");
+  setBusy("3d", "Uploading photo…");
   $("dropzone-text").textContent = file.name;
   const form = new FormData();
   form.append("image", file);
   try {
     const body = await (await api("/api/sessions", { method: "POST", body: form })).json();
-    state.sessionId = body.session_id;
-    state.image = body.image;
-    state.depthReady = false;
-    $("image-info").textContent = `${file.name} — ${body.image.w} × ${body.image.h} px`;
-
-    // The server seeds params.json with this device's real defaults at creation.
-    state.params = await (await api(`/api/sessions/${state.sessionId}/params`)).json();
-    state.defaults = { ...state.params };
-    $("params-card").hidden = false;
-    $("export-card").hidden = false;
-    syncControlsFromParams();
-    resetExportUi();
-    await waitForDepth();
+    await enterSession(body.session_id, body.image, file.name);
   } catch (err) {
     setPill("error", "Upload failed");
+    setBusy("2d", null);
+    setBusy("3d", null);
     showError(`Upload failed: ${err.message}`);
+  }
+}
+
+async function enterSession(sessionId, image, filename) {
+  state.sessionId = sessionId;
+  state.image = image;
+  state.depthReady = false;
+  state.lastExport = null;
+  localStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  $("image-info").textContent = `${filename} — ${image.w} × ${image.h} px`;
+  $("dropzone-text").textContent = filename;
+
+  // params.json holds this session's tuned values (server-seeded defaults when new).
+  state.params = await (await api(`/api/sessions/${sessionId}/params`)).json();
+  $("params-card").hidden = false;
+  $("export-card").hidden = false;
+  syncControlsFromParams();
+  resetExportUi();
+  await waitForDepth();
+}
+
+// Resume the previous session after a page reload — a reload must NOT silently reset
+// tuned parameters by forcing a fresh upload (owner feedback).
+async function tryResume() {
+  const sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!sessionId) return;
+  try {
+    const s = await (await api(`/api/sessions/${sessionId}/status`)).json();
+    if (!s.width || !s.height) return;
+    await enterSession(
+      sessionId,
+      { w: s.width, h: s.height },
+      s.original_filename ?? "previous photo"
+    );
+  } catch {
+    localStorage.removeItem(SESSION_STORAGE_KEY); // session gone; back to empty state
   }
 }
 
@@ -282,16 +369,23 @@ async function waitForDepth() {
     if (s.status === "ready") break;
     if (s.status === "error") {
       setPill("error", "Depth failed");
+      setBusy("2d", null);
+      setBusy("3d", null);
       showError(`Depth inference failed: ${s.error}`);
       return;
     }
-    setPill("busy", `Estimating depth (${s.model_id ?? "…"} on ${s.device ?? "…"})…`);
+    const msg = `Estimating depth (${s.model_id ?? "…"} on ${s.device ?? "…"})…`;
+    setPill("busy", "Estimating depth…");
+    setBusy("2d", msg);
+    setBusy("3d", msg);
     await new Promise((r) => setTimeout(r, 1000));
   }
   state.depthReady = true;
   state.readyModel = s.model_id ?? state.params.depth_model;
   $("export-btn").disabled = false;
   setPill("ready", "Ready");
+  setBusy("2d", null);
+  setBusy("3d", null);
   showError("");
   refresh2d();
   refresh3d();
@@ -318,7 +412,8 @@ const saveAndRefresh = debounce(async () => {
     showError(`Saving parameters failed: ${err.message}`);
     return;
   }
-  // A depth_model switch flips the session back to processing; wait it out.
+  // A depth_model switch flips the session back to processing; wait it out. All other
+  // tuned values are already saved above and stay exactly as the user set them.
   if (!state.depthReady || state.params.depth_model !== state.readyModel) {
     await waitForDepth(); // refreshes both previews when done
     return;
@@ -327,7 +422,7 @@ const saveAndRefresh = debounce(async () => {
   refresh3dDebounced();
 }, DEBOUNCE_2D_MS);
 
-$("reset-btn")?.addEventListener("click", () => {
+$("reset-btn").addEventListener("click", () => {
   if (!state.defaults) return;
   state.params = { ...state.defaults };
   syncControlsFromParams();
@@ -345,6 +440,7 @@ async function refresh2d() {
   const grayscale = $("grayscale-toggle").checked;
   const img = $("preview2d");
   img.classList.add("stale");
+  setBusy("2d", "Updating…");
   let blob;
   try {
     const res = await api(
@@ -352,7 +448,10 @@ async function refresh2d() {
     );
     blob = await res.blob();
   } catch (err) {
-    if (seq === preview2dSeq) img.classList.remove("stale");
+    if (seq === preview2dSeq) {
+      img.classList.remove("stale");
+      setBusy("2d", null);
+    }
     if (err.status !== 409) showError(`2D preview failed: ${err.message}`);
     return;
   }
@@ -362,6 +461,7 @@ async function refresh2d() {
   img.src = preview2dObjectUrl;
   img.hidden = false;
   img.classList.remove("stale");
+  setBusy("2d", null);
   $("preview2d-placeholder").hidden = true;
 }
 
@@ -422,6 +522,7 @@ let preview3dSeq = 0;
 async function refresh3d() {
   if (!state.sessionId || !state.depthReady) return;
   const seq = ++preview3dSeq;
+  setBusy("3d", "Rebuilding mesh…");
   let buffer;
   try {
     const res = await api(`/api/sessions/${state.sessionId}/preview/mesh`, {
@@ -431,55 +532,63 @@ async function refresh3d() {
     });
     buffer = await res.arrayBuffer();
   } catch (err) {
+    if (seq === preview3dSeq) setBusy("3d", null);
     if (err.status !== 409) showError(`3D preview failed: ${err.message}`);
     return;
   }
   if (seq !== preview3dSeq) return;
 
-  new GLTFLoader().parse(buffer, "", (gltf) => {
-    if (seq !== preview3dSeq) return;
-    if (!viewer.scene) initViewer();
-    $("preview3d-placeholder").hidden = true;
+  new GLTFLoader().parse(
+    buffer,
+    "",
+    (gltf) => {
+      if (seq !== preview3dSeq) return;
+      setBusy("3d", null);
+      $("preview3d-placeholder").hidden = true;
 
-    if (viewer.mesh) {
-      viewer.scene.remove(viewer.mesh);
-      viewer.mesh.traverse((o) => o.geometry?.dispose());
+      if (viewer.mesh) {
+        viewer.scene.remove(viewer.mesh);
+        viewer.mesh.traverse((o) => o.geometry?.dispose());
+      }
+      const root = gltf.scene;
+      root.traverse((o) => {
+        if (o.isMesh) o.material = WOOD;
+      });
+      // Backend meshes are Z-up (relief toward +Z); three.js is Y-up.
+      root.rotation.x = -Math.PI / 2;
+
+      // Center on the origin with the base resting on the y=0 grid plane.
+      const box = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      root.position.set(-center.x, -box.min.y, -center.z);
+      viewer.scene.add(root);
+      viewer.mesh = root;
+
+      // mm scale grid floor, sized to the model, 10 mm cells.
+      const gridSpan = Math.ceil((Math.max(size.x, size.z) * 1.6) / 100) * 100;
+      if (!viewer.grid || viewer.grid.userData.span !== gridSpan) {
+        if (viewer.grid) viewer.scene.remove(viewer.grid);
+        viewer.grid = new THREE.GridHelper(gridSpan, gridSpan / 10, 0x4a5160, 0x343946);
+        viewer.grid.userData.span = gridSpan;
+        viewer.scene.add(viewer.grid);
+      }
+
+      // Fit the camera on first load or when the model size changes substantially;
+      // never yank it around mid-orbit for ordinary param tweaks.
+      const diag = size.length();
+      if (Math.abs(diag - viewer.fittedDiag) / diag > 0.25) {
+        viewer.fittedDiag = diag;
+        viewer.camera.position.set(diag * 0.05, diag * 0.9, diag * 1.1);
+        viewer.controls.target.set(0, size.y / 2, 0);
+        viewer.controls.update();
+      }
+    },
+    (err) => {
+      if (seq === preview3dSeq) setBusy("3d", null);
+      showError(`3D preview failed to parse: ${err.message ?? err}`);
     }
-    const root = gltf.scene;
-    root.traverse((o) => {
-      if (o.isMesh) o.material = WOOD;
-    });
-    // Backend meshes are Z-up (relief toward +Z); three.js is Y-up.
-    root.rotation.x = -Math.PI / 2;
-
-    // Center on the origin with the base resting on the y=0 grid plane.
-    const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    root.position.set(-center.x, -box.min.y, -center.z);
-    viewer.scene.add(root);
-    viewer.mesh = root;
-
-    // mm scale grid floor, sized to the model, 10 mm cells.
-    const gridSpan = Math.ceil((Math.max(size.x, size.z) * 1.6) / 100) * 100;
-    if (!viewer.grid || viewer.grid.userData.span !== gridSpan) {
-      if (viewer.grid) viewer.scene.remove(viewer.grid);
-      viewer.grid = new THREE.GridHelper(gridSpan, gridSpan / 10, 0x4a5160, 0x343946);
-      viewer.grid.userData.span = gridSpan;
-      viewer.scene.add(viewer.grid);
-    }
-
-    // Fit the camera on first load or when the model size changes substantially;
-    // never yank it around mid-orbit for ordinary param tweaks.
-    const diag = size.length();
-    if (Math.abs(diag - viewer.fittedDiag) / diag > 0.25) {
-      viewer.fittedDiag = diag;
-      viewer.camera.position.set(diag * 0.05, diag * 0.9, diag * 1.1);
-      viewer.controls.target.set(0, size.y / 2, 0);
-      viewer.controls.update();
-    }
-  },
-  (err) => showError(`3D preview failed to parse: ${err.message ?? err}`));
+  );
 }
 
 const refresh3dDebounced = debounce(refresh3d, DEBOUNCE_3D_MS - DEBOUNCE_2D_MS);
@@ -489,16 +598,39 @@ const refresh3dDebounced = debounce(refresh3d, DEBOUNCE_3D_MS - DEBOUNCE_2D_MS);
 function resetExportUi() {
   $("export-status").textContent = "";
   $("export-summary").hidden = true;
-  $("download-link").hidden = true;
   $("export-btn").disabled = false;
+}
+
+function triggerDownload(url) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 $("export-btn").addEventListener("click", async () => {
   if (!state.sessionId) return;
   const btn = $("export-btn");
+  const paramsKey = JSON.stringify(state.params);
+
+  // Same params as the last successful export → serve the cached file, skip re-meshing.
+  if (state.lastExport?.key === paramsKey) {
+    try {
+      const job = await (await api(`/api/jobs/${state.lastExport.jobId}`)).json();
+      if (job.status === "ready") {
+        triggerDownload(state.lastExport.downloadUrl);
+        $("export-status").textContent = "Same settings — served the cached mesh.";
+        return;
+      }
+    } catch {
+      /* job gone (server restart) — fall through to a fresh export */
+    }
+  }
+
   btn.disabled = true;
   $("export-summary").hidden = true;
-  $("download-link").hidden = true;
   $("export-status").textContent = "Building full-resolution mesh…";
   try {
     const { job_id } = await (
@@ -522,10 +654,8 @@ $("export-btn").addEventListener("click", async () => {
       `${job.triangles.toLocaleString()} triangles · ${mb} MB · ` +
       `${job.width_mm} × ${job.height_mm} mm`;
     $("export-summary").hidden = false;
-    const link = $("download-link");
-    link.href = job.download_url;
-    link.hidden = false;
-    link.click(); // trigger the browser download immediately
+    state.lastExport = { key: paramsKey, jobId: job_id, downloadUrl: job.download_url };
+    triggerDownload(job.download_url);
     $("export-status").textContent = "Done — check your downloads.";
   } catch (err) {
     $("export-status").textContent = "";
@@ -538,6 +668,9 @@ $("export-btn").addEventListener("click", async () => {
 // --- boot ------------------------------------------------------------------------------------------
 
 buildControls();
+wireTabs();
 wireUpload();
 initViewer();
-loadModels().catch((err) => showError(`Could not load model registry: ${err.message}`));
+loadModels()
+  .then(tryResume)
+  .catch((err) => showError(`Could not load model registry: ${err.message}`));

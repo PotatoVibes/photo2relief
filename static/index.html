@@ -16,13 +16,15 @@
         <h1>Photo2Relief</h1>
         <p class="tagline">Photo &rarr; heightmap &rarr; CNC-machinable relief mesh (mm)</p>
       </div>
-      <span id="status-pill" class="pill pill-idle">No photo</span>
+      <nav class="header-right">
+        <a href="/help.html" target="_blank" class="help-link">Parameter guide</a>
+        <span id="status-pill" class="pill pill-idle">No photo</span>
+      </nav>
     </header>
 
     <main id="app">
       <aside class="sidebar">
         <section class="card" id="upload-card">
-          <h2>Photo</h2>
           <label id="dropzone" for="file-input">
             <span id="dropzone-text">Drop a photo here or click to choose</span>
             <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
@@ -30,48 +32,41 @@
           <p id="image-info" class="hint"></p>
         </section>
 
-        <section class="card param-groups" id="params-card" hidden>
-          <h2>Parameters</h2>
+        <section class="card param-card" id="params-card" hidden>
+          <div class="control model-control">
+            <label class="name">Depth model</label>
+            <select id="depth_model"></select>
+            <p class="hint" id="model-hint"></p>
+          </div>
 
-          <details open>
-            <summary>Depth model</summary>
-            <div class="control">
-              <select id="depth_model"></select>
-              <p class="hint" id="model-hint"></p>
-            </div>
-          </details>
+          <div class="tabbar" role="tablist">
+            <button class="tab active" data-tab="tab-size">Size</button>
+            <button class="tab" data-tab="tab-shaping">Shaping</button>
+            <button class="tab" data-tab="tab-export">Export</button>
+          </div>
 
-          <details open>
-            <summary>Size</summary>
+          <div class="tabpanel" id="tab-size">
             <div id="group-size"></div>
             <p class="hint" id="derived-size"></p>
-          </details>
+          </div>
 
-          <details open>
-            <summary>Depth shaping</summary>
+          <div class="tabpanel" id="tab-shaping" hidden>
             <div id="group-depth"></div>
-          </details>
-
-          <details open>
-            <summary>Surface</summary>
+            <div class="subhead">Surface</div>
             <div id="group-surface"></div>
-          </details>
+          </div>
 
-          <details>
-            <summary>Export settings</summary>
+          <div class="tabpanel" id="tab-export" hidden>
             <div id="group-export"></div>
-            <p class="hint">Fusion + CAM handle 2M triangles fine; decimation mainly shrinks file size.</p>
-          </details>
+          </div>
 
           <button id="reset-btn" class="secondary">Reset to defaults</button>
         </section>
 
         <section class="card" id="export-card" hidden>
-          <h2>Export</h2>
           <button id="export-btn">Export mesh</button>
           <p id="export-status" class="hint"></p>
           <p id="export-summary" class="summary" hidden></p>
-          <a id="download-link" hidden>Download again</a>
         </section>
       </aside>
 
@@ -86,6 +81,10 @@
           <div class="preview-body" id="preview2d-body">
             <p class="placeholder" id="preview2d-placeholder">Upload a photo to see the relief preview.</p>
             <img id="preview2d" alt="Hillshaded heightmap preview" hidden />
+            <div class="busy-overlay" id="busy2d" hidden>
+              <div class="spinner"></div>
+              <span id="busy2d-text">Updating&hellip;</span>
+            </div>
           </div>
         </div>
 
@@ -95,6 +94,10 @@
           </div>
           <div class="preview-body" id="viewport">
             <p class="placeholder" id="preview3d-placeholder">The 3D preview appears here.</p>
+            <div class="busy-overlay" id="busy3d" hidden>
+              <div class="spinner"></div>
+              <span id="busy3d-text">Updating&hellip;</span>
+            </div>
           </div>
         </div>
       </section>

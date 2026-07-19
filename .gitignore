@@ -8,3 +8,6 @@ __pycache__/
 *.egg-info/
 tests/fixtures/*.png
 tests/fixtures/*.jpg
+# help-page example renders are generated locally from the owner's own photo
+# (scratchpad/gen_help_examples.py); not committed pending owner OK
+static/help/img/

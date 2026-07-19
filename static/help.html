@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Photo2Relief — Parameter Guide</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body class="doc">
+    <header>
+      <div>
+        <h1>Parameter guide</h1>
+        <p class="tagline">What every slider does, and when to reach for it</p>
+      </div>
+      <nav class="header-right"><a class="back" href="/">&larr; Back to the app</a></nav>
+    </header>
+
+    <main>
+      <h2>How the pipeline works</h2>
+      <p>
+        Your photo goes through three stages:
+      </p>
+      <ol>
+        <li><strong>Depth estimation</strong> — a neural depth model guesses how far every pixel is from the camera. This is the only slow step, and it runs <em>once per photo per model</em>; the result is cached. No slider below ever re-runs it.</li>
+        <li><strong>Heightmap shaping</strong> — every parameter on the Shaping and Size tabs re-shapes that cached depth into a 0&ndash;1 heightmap. This is instant, so tweak freely.</li>
+        <li><strong>Meshing</strong> — the heightmap becomes a watertight solid: your relief on top, vertical walls, flat back. Export-tab settings only affect this final step.</li>
+      </ol>
+      <p>
+        In the previews, <strong>brighter = higher = closer to the camera</strong> (grayscale mode shows this directly; the default hillshade view lights the surface like a raking lamp so you can judge the carve).
+      </p>
+
+      <h2>Depth model</h2>
+      <p class="param-meta">Dropdown, top of the parameter panel. Switching re-runs depth once (then it's cached); all your other settings are kept.</p>
+      <table>
+        <tr><th>Model</th><th>Character</th><th>Use when</th></tr>
+        <tr><td><code>da3mono-large</code> (default)</td><td>Direct depth &mdash; true-to-life proportions, smooth gradations from near to far.</td><td>You want geometric accuracy; scenes with real depth ranges.</td></tr>
+        <tr><td><code>da2-large</code></td><td>Disparity-style &mdash; exaggerates the near field and squashes the background into a thin range.</td><td>Portrait-style bas relief where you want the subject to "pop". Often the more <em>artistic</em> look.</td></tr>
+        <tr><td><code>da2-small</code></td><td>Same flavor as da2-large, lower fidelity, very fast, runs fine on CPU.</td><td>Quick drafts, or no GPU.</td></tr>
+      </table>
+      <div class="figrow">
+        <figure><img src="/help/img/baseline_gray.png" alt="da3mono-large heightmap" /><figcaption>da3mono-large: smooth near&rarr;far gradation</figcaption></figure>
+        <figure><img src="/help/img/model_da2_gray.png" alt="da2-large heightmap" /><figcaption>da2-large: subject bright, background crushed dark</figcaption></figure>
+      </div>
+      <div class="tip">
+        Because the two families distribute depth so differently, <strong>clip and threshold values do not transfer between models</strong>. On da2-* the whole background may live below 0.1 (use small thresholds like 0.02&ndash;0.08); on da3mono the same background can span 0.2&ndash;0.5.
+      </div>
+
+      <h2>Size tab</h2>
+
+      <h3>Width (mm)</h3>
+      <p class="param-meta">10&ndash;1000 mm &middot; default 150</p>
+      <p>Physical X size of the finished piece. Height is derived from the photo's aspect ratio (shown under the sliders). Everything in the app is millimeters, end to end &mdash; the exported STL matches these numbers exactly.</p>
+
+      <h3>Relief height (mm)</h3>
+      <p class="param-meta">0.5&ndash;100 mm &middot; default 8</p>
+      <p>The Z range of the carved surface: the difference in height between the closest point in the photo and the farthest. Bigger values read more dramatically but need deeper cuts and steeper walls (think about your cutter's reach). For wall-hung wood reliefs around 150&ndash;250&nbsp;mm wide, 6&ndash;15&nbsp;mm is a good range.</p>
+
+      <h3>Base thickness (mm)</h3>
+      <p class="param-meta">0.5&ndash;50 mm &middot; default 3</p>
+      <p>A solid flat slab underneath the relief. It's what keeps the part rigid and gives Fusion stock to hold onto. Total part thickness = base + relief height.</p>
+
+      <h3>Border frame (mm)</h3>
+      <p class="param-meta">0&ndash;50 mm &middot; default 0 (off)</p>
+      <p>Adds a flat margin around the image at <strong>full stock height</strong> (base + relief). It's a machinable reference and clamping surface at the exact top-of-stock plane &mdash; useful for workholding, for facing checks, and for a clean physical frame. Note it adds to the finished part's width and height.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/baseline_gray.png" alt="no frame" /><figcaption>frame = 0</figcaption></figure>
+        <figure><img src="/help/img/frame_10.png" alt="10 mm frame" /><figcaption>frame = 10 mm (white = full stock height)</figcaption></figure>
+      </div>
+
+      <h2>Shaping tab — depth</h2>
+
+      <h3>Invert depth</h3>
+      <p class="param-meta">off by default</p>
+      <p>Flips near and far: the subject becomes the deepest point instead of the highest. Use it to carve an <em>intaglio</em> (sunken relief) or a mold/stamp where the positive comes out of a casting.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/baseline_gray.png" alt="normal" /><figcaption>normal</figcaption></figure>
+        <figure><img src="/help/img/invert_on.png" alt="inverted" /><figcaption>inverted</figcaption></figure>
+      </div>
+
+      <h3>Gamma</h3>
+      <p class="param-meta">0.2&ndash;5.0 &middot; default 1.0 (off)</p>
+      <p>A nonlinear remap of the heightmap. <strong>Above 1</strong>: background heights get compressed toward zero while contrast among the near/high parts widens &mdash; the subject pops, the room fades. <strong>Below 1</strong>: lifts the background and flattens subject contrast. This is usually the single most effective "make the subject stand out" knob.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/gamma_05.png" alt="gamma 0.5" /><figcaption>gamma 0.5 &mdash; background lifted</figcaption></figure>
+        <figure><img src="/help/img/baseline_gray.png" alt="gamma 1.0" /><figcaption>gamma 1.0</figcaption></figure>
+        <figure><img src="/help/img/gamma_25.png" alt="gamma 2.5" /><figcaption>gamma 2.5 &mdash; background crushed, subject emphasized</figcaption></figure>
+      </div>
+
+      <h3>Depth floor / depth ceiling</h3>
+      <p class="param-meta">0&ndash;1 each &middot; defaults 0 / 1 (off)</p>
+      <p>Clips the depth range <em>before</em> everything else, then re-stretches what survives to fill 0&ndash;1. Raising the <strong>floor</strong> merges everything farther than that value into the flat background &mdash; the standard way to kill busy room clutter behind a subject. Lowering the <strong>ceiling</strong> clamps blown-out foreground spikes (a hand or nose much closer than the rest) so they stop eating your whole relief range.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/floor_035.png" alt="floor 0.35" /><figcaption>floor 0.35 &mdash; far room merged to flat</figcaption></figure>
+        <figure><img src="/help/img/ceiling_07.png" alt="ceiling 0.7" /><figcaption>ceiling 0.7 &mdash; near spikes clamped, mid-range expanded</figcaption></figure>
+      </div>
+
+      <h3>Flatten background + threshold</h3>
+      <p class="param-meta">off by default &middot; threshold 0&ndash;1, useful values are model-dependent</p>
+      <p>Hard-zeros every pixel below the threshold, giving a perfectly flat field around the subject &mdash; ideal when you want the subject floating on a clean plane rather than a fading room. Unlike the depth floor (which re-stretches), flatten leaves everything above the threshold untouched.</p>
+      <p>The right threshold depends on the photo <em>and the model</em> (see the tip above): on <code>da2-*</code> try 0.02&ndash;0.08; on <code>da3mono</code> try 0.2&ndash;0.5. Watch the grayscale preview: the flattened region goes pure black.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/flatten_030.png" alt="flatten 0.30 on da3" /><figcaption>da3mono, threshold 0.30</figcaption></figure>
+        <figure><img src="/help/img/flatten_050.png" alt="flatten 0.50 on da3" /><figcaption>da3mono, threshold 0.50</figcaption></figure>
+        <figure><img src="/help/img/flatten_da2.png" alt="flatten on da2" /><figcaption>da2-large, floor 0.36 + threshold 0.06</figcaption></figure>
+      </div>
+
+      <h2>Shaping tab — surface</h2>
+
+      <h3>Smoothing (&sigma; px)</h3>
+      <p class="param-meta">0&ndash;10 &middot; default 1.5</p>
+      <p>Gaussian blur on the heightmap. A little (1&ndash;2) removes depth-model noise and stair-stepping that would show as tooling chatter; a lot (4+) melts fine features into soft billows. If a ball-nose finishing pass is doing the final surface anyway, moderate smoothing costs you little.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/smoothing_0.png" alt="no smoothing" /><figcaption>smoothing 0 &mdash; raw model output</figcaption></figure>
+        <figure><img src="/help/img/smoothing_5.png" alt="smoothing 5" /><figcaption>smoothing 5 &mdash; soft, melted detail</figcaption></figure>
+      </div>
+
+      <h3>Edge-preserving (bilateral)</h3>
+      <p class="param-meta">off by default &middot; uses the same &sigma; slider</p>
+      <p>Swaps the Gaussian for a bilateral filter: flat areas still smooth out, but sharp height steps (the subject's silhouette against the background) stay crisp instead of blurring into a ramp. Slightly slower; worth trying when heavy smoothing starts eating the outline.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/gaussian_3.png" alt="gaussian 3" /><figcaption>Gaussian &sigma;3 &mdash; silhouette softens</figcaption></figure>
+        <figure><img src="/help/img/bilateral_3.png" alt="bilateral 3" /><figcaption>Bilateral &sigma;3 &mdash; silhouette stays crisp</figcaption></figure>
+      </div>
+
+      <h3>Detail blend (luminance)</h3>
+      <p class="param-meta">0&ndash;1 &middot; default 0.15</p>
+      <p>Depth models capture shape but smooth over fine texture &mdash; fur, hair, fabric weave. This adds a high-pass of the photo's <em>brightness</em> back onto the heightmap (the lithophane trick): at 1.0 it contributes about 15% of the relief range. Great for pet fur and hair; turn it down if photo lighting (shadows, glare) starts printing as false relief.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/detail_0.png" alt="detail 0" /><figcaption>detail 0 &mdash; shape only</figcaption></figure>
+        <figure><img src="/help/img/detail_07.png" alt="detail 0.7" /><figcaption>detail 0.7 &mdash; fur/texture added</figcaption></figure>
+      </div>
+
+      <h3>Edge taper (mm)</h3>
+      <p class="param-meta">0&ndash;50 mm &middot; default 0 (off)</p>
+      <p>Ramps the relief down to the base over the last N millimeters at the outer edge of the <em>image content</em>, so the picture doesn't end in an abrupt cliff at the panel border. Combine with a border frame for a "picture dissolving into its mat" look &mdash; or leave both off if the composition already fades naturally.</p>
+      <div class="figrow">
+        <figure><img src="/help/img/baseline_gray.png" alt="no taper" /><figcaption>taper 0</figcaption></figure>
+        <figure><img src="/help/img/taper_10.png" alt="taper 10mm" /><figcaption>taper 10 mm &mdash; edges ramp to base</figcaption></figure>
+      </div>
+
+      <h2>Export tab</h2>
+
+      <h3>Resolution (grid long side)</h3>
+      <p class="param-meta">512 / 1024 / 2048 &middot; default 1024</p>
+      <p>How many mesh vertices along the long side of the model. 1024 &asymp; 2M triangles &asymp; 100 MB STL &mdash; more than enough for a 3-axis finishing pass at typical sizes (at 200 mm wide, 1024 grid = one vertex every 0.2 mm, finer than a ball-nose stepover). Use 2048 only for very large panels; 512 for quick test cuts.</p>
+
+      <h3>Decimation ratio</h3>
+      <p class="param-meta">0&ndash;0.95 &middot; default 0 (off)</p>
+      <p>After meshing, removes that fraction of triangles by collapsing edges where the surface is nearly flat (0.5 = roughly half the triangles). Shape change is negligible at moderate values; the point is <strong>file size and viewer snappiness</strong>, not machining quality &mdash; Fusion and its CAM handle 2M-triangle meshes fine, so leave this at 0 unless the files annoy you. The mesh is re-checked watertight after decimation.</p>
+
+      <h3>Format</h3>
+      <p class="param-meta">binary STL (default) or OBJ</p>
+      <p>STL is what Fusion's Insert &rarr; Insert Mesh expects; OBJ if some other tool in your chain prefers it. <strong>STL files carry no units</strong> &mdash; when Fusion asks on import, pick <em>millimeters</em>. The exported filename embeds the physical size (e.g. <code>&hellip;_150x199.2mm.stl</code>) so you can sanity-check the bounding box after import.</p>
+
+      <h2>A suggested order of operations</h2>
+      <ol>
+        <li><strong>Pick the depth model</strong> first (geometric da3mono vs artistic da2) &mdash; every threshold below depends on it.</li>
+        <li><strong>Isolate the subject</strong>: raise the depth floor and/or enable flatten-background until the room is gone.</li>
+        <li><strong>Balance the range</strong>: gamma up to make the subject pop; ceiling down if one near feature dominates.</li>
+        <li><strong>Dress the surface</strong>: a little smoothing, bilateral if the silhouette suffers, detail blend for fur/hair.</li>
+        <li><strong>Physical size last</strong>: width, relief height, base, taper/frame &mdash; watch the derived size readout.</li>
+        <li><strong>Export</strong> at 1024 and check the summary line's dimensions before importing into Fusion (in mm!).</li>
+      </ol>
+
+      <p class="hint">Example images are rendered from your own uploaded photo via the exact same pipeline the previews use &mdash; grayscale for level-type parameters (brighter = higher), hillshade for surface-texture ones.</p>
+    </main>
+  </body>
+</html>
