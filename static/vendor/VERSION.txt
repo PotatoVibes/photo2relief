@@ -7,3 +7,4 @@ three.js 0.185.1 (MIT), vendored 2026-07-18 from the npm package via unpkg.com:
 
 The utils/ siblings sit one level up because GLTFLoader imports them as '../utils/...'.
 Bare 'three' specifiers resolve via the import map in index.html. No CDN at runtime.
+  three/three.core.js        <- three@0.185.1/build/three.core.js (three.module.js re-exports from it since the r16x build split)
