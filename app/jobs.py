@@ -100,12 +100,15 @@ def _run_export(job: ExportJob, params: ReliefParams) -> None:
         _set_progress(job, 0.8, f"writing {params.output_format.upper()}")
         data = meshing.export_bytes(mesh, params.output_format)
 
-        # Physical dims include the border frame (total_width_mm), matching the mesh.
+        # Filename encodes the stock size (matches the UI's "Stock" readout): full
+        # width/height including the border frame, plus thickness (base + relief).
         model_height_mm = params.total_width_mm * h.shape[0] / h.shape[1]
+        thickness_mm = params.base_thickness_mm + params.relief_height_mm
         stem = _export_stem(read_meta(job.session_id).get("original_filename") or "")
         filename = (
             f"{stem}_"
-            f"{_fmt_dim_mm(params.total_width_mm)}x{_fmt_dim_mm(model_height_mm)}mm."
+            f"{_fmt_dim_mm(params.total_width_mm)}x{_fmt_dim_mm(model_height_mm)}"
+            f"x{_fmt_dim_mm(thickness_mm)}mm."
             f"{params.output_format}"
         )
         out_path = session_dir(job.session_id) / filename
