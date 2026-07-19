@@ -77,12 +77,14 @@ def _run_export(job: ExportJob, params: ReliefParams) -> None:
         out_path.write_bytes(data)
 
         with _lock:
-            job.status = "ready"
+            # Endpoint readers don't take this lock, so publish status *last*: they must
+            # never observe "ready" while file_path/filename are still None.
             job.file_path = out_path
             job.filename = filename
             job.elapsed_s = round(time.monotonic() - started, 3)
+            job.status = "ready"
     except Exception as exc:  # noqa: BLE001 - surface any failure via job status
         with _lock:
-            job.status = "error"
             job.error = str(exc)
             job.elapsed_s = round(time.monotonic() - started, 3)
+            job.status = "error"
