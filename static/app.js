@@ -24,59 +24,151 @@ const SESSION_STORAGE_KEY = "p2r_session_id";
 // --- parameter table (ranges mirror ReliefParams in app/schemas.py) --------------------
 // Tab layout per owner feedback: Size | Shaping (depth + surface) | Export.
 
+// Every param carries a `tip` -> hover tooltip (title attr) so the whole table has
+// inline help without adding visible lines (owner wants the app to fit one page). The
+// handful of genuinely tricky params also keep an always-visible `hint`. Full prose per
+// param lives on /help.html.
+
 const PARAM_GROUPS = {
   "group-size": [
-    { id: "model_width_mm", label: "Width (mm)", min: 10, max: 1000, step: 1 },
-    { id: "relief_height_mm", label: "Relief height (mm)", min: 0.5, max: 100, step: 0.5 },
-    { id: "base_thickness_mm", label: "Base thickness (mm)", min: 0.5, max: 50, step: 0.5 },
+    {
+      id: "model_width_mm",
+      label: "Width (mm)",
+      min: 10,
+      max: 1000,
+      step: 1,
+      tip: "Physical width of the image content in mm. Height follows the photo's aspect ratio (shown below).",
+    },
+    {
+      id: "relief_height_mm",
+      label: "Relief height (mm)",
+      min: 0.5,
+      max: 100,
+      step: 0.5,
+      tip: "How far the nearest point rises above the base — the carving depth.",
+    },
+    {
+      id: "base_thickness_mm",
+      label: "Base thickness (mm)",
+      min: 0.5,
+      max: 50,
+      step: 0.5,
+      tip: "Thickness of the solid slab beneath the relief; gives material to clamp or screw down.",
+    },
     {
       id: "border_frame_mm",
       label: "Border frame (mm)",
       min: 0,
       max: 50,
       step: 0.5,
+      tip: "Flat clamping margin at full stock height; adds to the part's overall size.",
       hint: "Flat margin at full stock height (base + relief) — a machinable clamping edge.",
     },
   ],
   "group-depth": [
-    { id: "invert_depth", label: "Invert depth (intaglio / mold)", type: "bool" },
-    { id: "gamma", label: "Gamma (>1 favors foreground)", min: 0.2, max: 5, step: 0.05 },
-    { id: "depth_floor", label: "Depth floor (clip far)", min: 0, max: 1, step: 0.01 },
-    { id: "depth_ceiling", label: "Depth ceiling (clip near)", min: 0, max: 1, step: 0.01 },
-    { id: "flatten_background", label: "Flatten background", type: "bool" },
+    {
+      id: "invert_depth",
+      label: "Invert depth (intaglio / mold)",
+      type: "bool",
+      tip: "Swaps near and far so the subject is recessed instead of raised — for molds or intaglio.",
+    },
+    {
+      id: "gamma",
+      label: "Gamma (>1 favors foreground)",
+      min: 0.2,
+      max: 5,
+      step: 0.05,
+      tip: "Redistributes height: >1 pushes the subject forward and flattens the background; <1 does the reverse.",
+    },
+    {
+      id: "depth_floor",
+      label: "Depth floor (clip far)",
+      min: 0,
+      max: 1,
+      step: 0.01,
+      tip: "Clips the far end: everything below this depth is pulled down to the base.",
+    },
+    {
+      id: "depth_ceiling",
+      label: "Depth ceiling (clip near)",
+      min: 0,
+      max: 1,
+      step: 0.01,
+      tip: "Clips the near end: everything above this depth is capped at full relief height.",
+    },
+    {
+      id: "flatten_background",
+      label: "Flatten background",
+      type: "bool",
+      tip: "Forces near-flat far regions all the way to the base for a clean backdrop.",
+    },
     {
       id: "background_threshold",
       label: "Background threshold",
       min: 0,
       max: 0.5,
       step: 0.005,
+      tip: "Depth below which a pixel counts as background when Flatten background is on.",
       hint: "Useful values are usually small (0.01–0.1); the slider covers 0–0.5 in fine steps.",
     },
   ],
   "group-surface": [
-    { id: "smoothing", label: "Smoothing (σ px)", min: 0, max: 10, step: 0.1 },
-    { id: "edge_preserve", label: "Edge-preserving (bilateral)", type: "bool" },
+    {
+      id: "smoothing",
+      label: "Smoothing (σ px)",
+      min: 0,
+      max: 10,
+      step: 0.1,
+      tip: "Blurs the heightmap to reduce noise and tool chatter. Higher = softer surface.",
+    },
+    {
+      id: "edge_preserve",
+      label: "Edge-preserving (bilateral)",
+      type: "bool",
+      tip: "Smooth with an edge-preserving (bilateral) blur so sharp boundaries survive.",
+    },
     {
       id: "detail_blend",
       label: "Detail blend (luminance)",
       min: 0,
       max: 1,
       step: 0.01,
+      tip: "Blends fine photo texture (hair, fabric) from image brightness on top of the depth shape.",
       hint: "Adds fine texture (hair, fabric) from the photo's brightness on top of the depth shape.",
     },
-    { id: "edge_taper_mm", label: "Edge taper (mm)", min: 0, max: 50, step: 0.5 },
+    {
+      id: "edge_taper_mm",
+      label: "Edge taper (mm)",
+      min: 0,
+      max: 50,
+      step: 0.5,
+      tip: "Ramps the outermost band down to the base over this width, easing the relief into its edge or frame.",
+    },
   ],
   "group-export": [
-    { id: "resolution", label: "Resolution (grid long side)", type: "enum", options: [512, 1024, 2048] },
+    {
+      id: "resolution",
+      label: "Resolution (grid long side)",
+      type: "enum",
+      options: [512, 1024, 2048],
+      tip: "Mesh grid density (long side). Higher = finer detail and larger files.",
+    },
     {
       id: "decimate_ratio",
       label: "Decimation ratio",
       min: 0,
       max: 0.95,
       step: 0.05,
+      tip: "Fraction of triangles removed to shrink the file. 0 = keep full detail.",
       hint: "Fraction of triangles removed to shrink the file (0.5 ≈ half as many). 0 = off; Fusion + CAM handle full meshes fine.",
     },
-    { id: "output_format", label: "Format", type: "enum", options: ["stl", "obj"] },
+    {
+      id: "output_format",
+      label: "Format",
+      type: "enum",
+      options: ["stl", "obj"],
+      tip: "STL (binary, universal for CAM) or OBJ.",
+    },
   ],
 };
 
@@ -171,6 +263,7 @@ function buildSlider(spec) {
   const name = document.createElement("label");
   name.className = "name";
   name.textContent = spec.label;
+  applyTip(name, spec);
   const row = document.createElement("div");
   row.className = "slider-row";
   const range = document.createElement("input");
@@ -199,6 +292,7 @@ function buildSlider(spec) {
 function buildCheckbox(spec) {
   const row = document.createElement("label");
   row.className = "checkbox-row";
+  applyTip(row, spec);
   const box = document.createElement("input");
   box.type = "checkbox";
   box.id = spec.id;
@@ -207,12 +301,20 @@ function buildCheckbox(spec) {
   return row;
 }
 
+// Hover tooltip + a subtle affordance so users know a label carries help text.
+function applyTip(labelEl, spec) {
+  if (!spec.tip) return;
+  labelEl.title = spec.tip;
+  labelEl.classList.add("has-tip");
+}
+
 function buildSelect(spec) {
   const wrap = document.createElement("div");
   wrap.className = "control";
   const name = document.createElement("label");
   name.className = "name";
   name.textContent = spec.label;
+  applyTip(name, spec);
   const sel = document.createElement("select");
   sel.id = spec.id;
   for (const opt of spec.options) {

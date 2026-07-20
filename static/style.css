@@ -164,6 +164,11 @@ header h1 { margin: 0; font-size: 18px; }
   margin-bottom: 3px;
 }
 
+/* Labels carrying a hover tooltip get a subtle dotted underline + help cursor. */
+.has-tip { cursor: help; }
+.control label.name.has-tip { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+.checkbox-row.has-tip { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+
 .slider-row { display: flex; gap: 8px; align-items: center; }
 .slider-row input[type="range"] { flex: 1; accent-color: var(--accent); min-width: 0; }
 .slider-row input[type="number"] {
