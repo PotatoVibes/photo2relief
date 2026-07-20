@@ -26,6 +26,27 @@ docker compose up --build                                                   # CP
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build   # GPU (primary)
 ```
 
+## Releasing & version tags
+
+Pushing a git tag matching `v*` triggers `.github/workflows/publish.yml`, which builds and pushes both the CPU (`:X.Y.Z`, `:latest`) and GPU (`:X.Y.Z-gpu`, `:latest-gpu`) images to `ghcr.io/potatovibes/photo2relief`. The tag name **is** the release version — nothing else sets it. Rules:
+
+- **Tag only from `main`, with a clean tree, after the full suite and lint pass.** A tag is a public release artifact: `uv run pytest` (green) + `uv run ruff check . && uv run ruff format --check .` (clean) before tagging, same bar as a commit but non-negotiable.
+- **Use SemVer `vX.Y.Z`** (the leading `v` is what the workflow's `tags: ['v*']` trigger matches — a tag without it silently publishes nothing):
+  - **X** (major) — a breaking change to the API contract (`SPEC.md`), the exported mesh/units semantics, env-var config, or the Docker run interface.
+  - **Y** (minor) — a backward-compatible feature (new param, new model in the registry, new endpoint).
+  - **Z** (patch) — a backward-compatible bug fix, doc, or packaging change only.
+- **Don't tag mid-milestone.** A release should sit on a coherent, acceptance-passing state. `v1.0.0` is gated on M6 (see status table). Before that, `v0.y.z` pre-releases are fine **and encouraged once** to smoke-test the publish pipeline end-to-end (verify both images appear in GHCR and run).
+- **Tags are immutable — never move or force-push one.** If a release is broken, fix forward with the next patch tag (`v1.0.1`); never re-point `v1.0.0` at a new commit (it desyncs anyone who already pulled that image digest).
+- **Bump the version in one place if/when one exists** (e.g. `pyproject.toml [project].version`) in the same commit you tag, so the code's self-reported version matches the tag. As of this writing there is no such field; add the bump step here if one is introduced.
+- **How to cut a release:**
+  ```bash
+  git switch main && git pull            # clean, up to date
+  uv run pytest && uv run ruff check . && uv run ruff format --check .
+  git tag -a v1.0.0 -m "Photo2Relief v1.0.0"   # annotated tag
+  git push origin v1.0.0                  # this line triggers the build
+  ```
+  Then confirm the run under the repo's **Actions** tab and that both image variants published. First-ever publish: set each GHCR package's visibility to **Public** once (it sticks).
+
 ## Conventions & hard rules
 
 - Python 3.12, `uv`-managed. Type hints everywhere; pydantic models in `schemas.py` are the single definition of `ReliefParams` and all API payloads.

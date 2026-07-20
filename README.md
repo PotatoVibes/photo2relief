@@ -22,6 +22,34 @@ docker compose up --build
 
 Open **http://localhost:8090**. First run downloads the default depth model into `./data/models/` (one-time, ~1–2 GB); after that the app works fully offline. Port and other settings are env-configurable — see `docker-compose.yml`.
 
+### Pre-built images (skip the build)
+
+Every tagged release publishes ready-to-run images to GitHub Container Registry, so you don't have to build locally. Two variants are published:
+
+| Image | For | Notes |
+|---|---|---|
+| `ghcr.io/potatovibes/photo2relief:latest` | **CPU** | Portable, smaller. Auto-selects the lightweight DA2-Small model. |
+| `ghcr.io/potatovibes/photo2relief:latest-gpu` | **NVIDIA GPU** | CUDA stack + the DA3MONO worker baked in. Multi-GB image; needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) and a `--gpus all` runtime. |
+
+Replace `latest` with a specific version (e.g. `:1.0.0`, `:1.0.0-gpu`) to pin a release.
+
+```bash
+# CPU
+docker run --rm -p 127.0.0.1:8090:8090 \
+  -v "$PWD/data/sessions:/srv/data/sessions" \
+  -v "$PWD/data/models:/srv/data/models" \
+  ghcr.io/potatovibes/photo2relief:latest
+
+# GPU
+docker run --rm --gpus all -p 127.0.0.1:8090:8090 \
+  -e P2R_DEVICE=cuda \
+  -v "$PWD/data/sessions:/srv/data/sessions" \
+  -v "$PWD/data/models:/srv/data/models" \
+  ghcr.io/potatovibes/photo2relief:latest-gpu
+```
+
+The compose files above build from source; the pre-built images are the no-build alternative. The `-gpu` tag only means the CUDA stack is *baked in* — it still needs a GPU host to actually use it, and falls back to CPU otherwise.
+
 ## Security & scope
 
 This is a **single-user, unauthenticated tool meant to run on your own machine.** There are no accounts or access control — anyone who can reach the port can upload images, run compute, and download meshes. Treat it like a local dev server:

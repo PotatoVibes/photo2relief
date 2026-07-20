@@ -1,0 +1,63 @@
+name: publish
+
+on:
+  push:
+    tags: ['v*']        # fires when you push a tag like v1.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write     # required to push to ghcr.io
+    strategy:
+      fail-fast: false    # a GPU build failure shouldn't cancel the CPU push (or vice versa)
+      matrix:
+        include:
+          # Portable CPU image gets the clean tags (latest, 1.2.3, ...).
+          - variant: cpu
+            torch_extra: cpu
+            suffix: ""
+          # GPU image gets -gpu-suffixed tags (latest-gpu, 1.2.3-gpu, ...).
+          - variant: gpu
+            torch_extra: cu128
+            suffix: "-gpu"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # auto-provided, no setup needed
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # suffix applied to every tag; onlatest keeps it on `latest` too (-> latest-gpu)
+          flavor: |
+            suffix=${{ matrix.suffix }},onlatest=true
+          # From a v1.2.3 tag: 1.2.3, 1.2, latest (each + suffix for the GPU variant)
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # amd64 only: the image bakes the torch/ML stack; arm64 would build under
+          # QEMU emulation on the runner (very slow, prone to OOM/timeout) for a
+          # platform nobody here targets.
+          platforms: linux/amd64
+          build-args: |
+            TORCH_EXTRA=${{ matrix.torch_extra }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Per-variant cache scope so the cpu and gpu builds don't clobber each other.
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
