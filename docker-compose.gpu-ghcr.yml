@@ -1,0 +1,16 @@
+# GPU overlay for the PUBLISHED image. Use together with docker-compose.ghcr.yml:
+#   docker compose -f docker-compose.ghcr.yml -f docker-compose.gpu-ghcr.yml up -d
+# Swaps to the -gpu image and reserves an NVIDIA device. Needs the NVIDIA Container
+# Toolkit on the host. Pin with P2R_TAG (default "latest" -> "latest-gpu").
+services:
+  photo2relief:
+    image: ghcr.io/potatovibes/photo2relief:${P2R_TAG:-latest}-gpu
+    environment:
+      - P2R_DEVICE=auto
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

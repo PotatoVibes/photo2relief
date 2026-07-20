@@ -1,0 +1,26 @@
+# Run the PUBLISHED image from GitHub Container Registry -- no local build.
+# For end users who just want to run the app:
+#   docker compose -f docker-compose.ghcr.yml up -d               # CPU
+#   docker compose -f docker-compose.ghcr.yml -f docker-compose.gpu-ghcr.yml up -d   # GPU
+# Pin a release by setting P2R_TAG (default "latest"), e.g. P2R_TAG=1.0.0.
+# (docker-compose.yml / docker-compose.gpu.yml are the build-from-source variants.)
+services:
+  photo2relief:
+    image: ghcr.io/potatovibes/photo2relief:${P2R_TAG:-latest}
+    pull_policy: always
+    ports:
+      # Bind to localhost only: this is an unauthenticated single-user app (see README
+      # "Security & scope"). Change the "127.0.0.1" prefix only if you know you want
+      # LAN/remote access and have put auth in front of it.
+      - "127.0.0.1:${P2R_PORT:-8090}:8090"
+    environment:
+      - P2R_PORT=8090
+      - P2R_DEVICE=cpu
+    volumes:
+      - ./data/sessions:/srv/data/sessions
+      - ./data/models:/srv/data/models
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s

@@ -12,43 +12,42 @@ Under the hood: monocular depth estimation (Depth Anything family) → heightmap
 
 Prerequisites: Docker + Docker Compose. For GPU mode (recommended): an NVIDIA GPU and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
+The fastest path pulls a **pre-built image** from GitHub Container Registry — no local build:
+
 ```bash
-# GPU (primary mode — target machine: RTX 3080)
+# GPU (recommended — pulls the CUDA image, reserves your NVIDIA GPU)
+docker compose -f docker-compose.ghcr.yml -f docker-compose.gpu-ghcr.yml up -d
+
+# CPU (portable; auto-selects the lightweight model)
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+Open **http://localhost:8090**. First run downloads the default depth model into `./data/models/` (one-time, ~1–2 GB); after that the app works fully offline. Confirm the device with `curl http://localhost:8090/api/health` (expect `"device":"cuda"` in GPU mode). Stop with the same command + `down` instead of `up -d`.
+
+Pin a specific release instead of the latest by setting `P2R_TAG` (e.g. `P2R_TAG=1.0.0`); port and other settings are env-configurable — see the compose files.
+
+### Build from source instead
+
+To build the image locally (for development, or to run un-published changes), use the `docker-compose.yml` / `docker-compose.gpu.yml` pair with `--build`:
+
+```bash
+# GPU
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 
-# CPU fallback (slower inference; auto-selects the lightweight model)
+# CPU
 docker compose up --build
 ```
 
-Open **http://localhost:8090**. First run downloads the default depth model into `./data/models/` (one-time, ~1–2 GB); after that the app works fully offline. Port and other settings are env-configurable — see `docker-compose.yml`.
+`--build` here forces a rebuild so your local changes take effect; without it Compose reuses a previously built image. (The `.ghcr` compose files above never build — they only pull.)
 
-### Pre-built images (skip the build)
-
-Every tagged release publishes ready-to-run images to GitHub Container Registry, so you don't have to build locally. Two variants are published:
+### Published image variants
 
 | Image | For | Notes |
 |---|---|---|
 | `ghcr.io/potatovibes/photo2relief:latest` | **CPU** | Portable, smaller. Auto-selects the lightweight DA2-Small model. |
-| `ghcr.io/potatovibes/photo2relief:latest-gpu` | **NVIDIA GPU** | CUDA stack + the DA3MONO worker baked in. Multi-GB image; needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) and a `--gpus all` runtime. |
+| `ghcr.io/potatovibes/photo2relief:latest-gpu` | **NVIDIA GPU** | CUDA stack + the DA3MONO worker baked in. Multi-GB image; needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
 
-Replace `latest` with a specific version (e.g. `:1.0.0`, `:1.0.0-gpu`) to pin a release.
-
-```bash
-# CPU
-docker run --rm -p 127.0.0.1:8090:8090 \
-  -v "$PWD/data/sessions:/srv/data/sessions" \
-  -v "$PWD/data/models:/srv/data/models" \
-  ghcr.io/potatovibes/photo2relief:latest
-
-# GPU
-docker run --rm --gpus all -p 127.0.0.1:8090:8090 \
-  -e P2R_DEVICE=cuda \
-  -v "$PWD/data/sessions:/srv/data/sessions" \
-  -v "$PWD/data/models:/srv/data/models" \
-  ghcr.io/potatovibes/photo2relief:latest-gpu
-```
-
-The compose files above build from source; the pre-built images are the no-build alternative. The `-gpu` tag only means the CUDA stack is *baked in* — it still needs a GPU host to actually use it, and falls back to CPU otherwise.
+Each tagged release also publishes pinned tags (`:1.0.0`, `:1.0.0-gpu`). The `-gpu` tag only means the CUDA stack is *baked in* — it still needs a GPU host to use it, and falls back to CPU otherwise. Prefer Compose (above); to run without it, `docker run --gpus all -p 127.0.0.1:8090:8090 -v "$PWD/data/models:/srv/data/models" ghcr.io/potatovibes/photo2relief:latest-gpu`.
 
 ## Security & scope
 
