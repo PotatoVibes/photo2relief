@@ -4,7 +4,7 @@ Turn a single 2D photograph into a CNC-machinable 2.5D relief mesh. Locally host
 
 Under the hood: monocular depth estimation (Depth Anything family) → heightmap shaping → grid-triangulated solid mesh. No cloud, no accounts, no paid licenses. See `SPEC.md` for the full design; `CLAUDE.md` for build conventions and status.
 
-> **Status:** Under construction, built milestone-by-milestone per `SPEC.md`. Sections below describe target behavior; anything not yet true should be flagged in `CLAUDE.md`.
+> **Status:** v1.0 — released. Built milestone-by-milestone per `SPEC.md`; see `CLAUDE.md` for the build log and decisions.
 
 ![Photo2Relief — upload a photo, tune the relief with live 2D/3D previews, export a watertight STL](docs/screenshot.png)
 
