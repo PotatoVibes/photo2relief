@@ -17,7 +17,9 @@ def _default_depth_model() -> str:
 
 class ReliefParams(BaseModel):
     """The full tuning-parameter surface (SPEC §3). Persisted per session as params.json,
-    sent whole on every preview/export call. Defaults suit a portrait relief in wood."""
+    sent whole on every preview/export call. Defaults re-tuned in M6 against three real
+    photos (object/pet/object): edge-preserving smoothing + a mild subject-forward gamma
+    give clean, forgiving reliefs across varied scenes, not just portraits."""
 
     # Size
     model_width_mm: float = Field(150.0, ge=10, le=1000)
@@ -28,16 +30,16 @@ class ReliefParams(BaseModel):
     # Depth shaping
     depth_model: str = Field(default_factory=_default_depth_model)
     invert_depth: bool = False
-    gamma: float = Field(1.0, ge=0.2, le=5.0)
+    gamma: float = Field(1.2, ge=0.2, le=5.0)
     depth_floor: float = Field(0.0, ge=0.0, le=1.0)
     depth_ceiling: float = Field(1.0, ge=0.0, le=1.0)
     flatten_background: bool = False
     background_threshold: float = Field(0.15, ge=0.0, le=1.0)
 
     # Surface
-    smoothing: float = Field(1.5, ge=0.0, le=10.0)
-    edge_preserve: bool = False
-    detail_blend: float = Field(0.15, ge=0.0, le=1.0)
+    smoothing: float = Field(2.5, ge=0.0, le=10.0)
+    edge_preserve: bool = True
+    detail_blend: float = Field(0.12, ge=0.0, le=1.0)
     edge_taper_mm: float = Field(0.0, ge=0, le=50)
 
     # Export
