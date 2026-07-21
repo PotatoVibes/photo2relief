@@ -37,8 +37,25 @@ class DepthInferenceError(RuntimeError):
 # --- device selection -------------------------------------------------------------
 
 
+def _mps_available(torch) -> bool:
+    """True if this torch build exposes a usable Apple-Silicon MPS backend.
+
+    Guarded with getattr: older torch builds (and non-macOS ones) may lack
+    ``torch.backends.mps`` entirely.
+    """
+    backends = getattr(torch, "backends", None)
+    mps = getattr(backends, "mps", None) if backends is not None else None
+    return bool(mps is not None and mps.is_available())
+
+
 def select_device() -> str:
-    """Resolve the active device from P2R_DEVICE + torch CUDA availability."""
+    """Resolve the active device from P2R_DEVICE + torch backend availability.
+
+    ``P2R_DEVICE`` (config ``device_override``): ``"auto"`` (default) picks the best
+    available backend in precedence order **cuda > mps > cpu**; ``"cpu"``/``"cuda"``/
+    ``"mps"`` force that backend (and the two accelerators raise if unavailable, so a
+    misconfig fails loudly instead of silently running on CPU).
+    """
     try:
         import torch
     except ImportError:
@@ -51,7 +68,16 @@ def select_device() -> str:
         if not cuda:
             raise DepthInferenceError("P2R_DEVICE=cuda but no CUDA device is available.")
         return "cuda"
-    return "cuda" if cuda else "cpu"
+    mps = _mps_available(torch)
+    if settings.device_override == "mps":
+        if not mps:
+            raise DepthInferenceError("P2R_DEVICE=mps but no MPS device is available.")
+        return "mps"
+    if cuda:
+        return "cuda"
+    if mps:
+        return "mps"
+    return "cpu"
 
 
 # --- convention normalization (pure, unit-tested) ---------------------------------
