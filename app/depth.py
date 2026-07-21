@@ -131,7 +131,14 @@ class TransformersDA2Backend:
         from transformers import pipeline
 
         self._device = device
-        pipe_device = 0 if device == "cuda" else -1
+        # transformers pipeline() accepts an int index (0 = cuda:0, -1 = cpu) or a
+        # device string; pass "mps" through so Apple-Silicon runs hit the GPU.
+        if device == "cuda":
+            pipe_device: int | str = 0
+        elif device == "mps":
+            pipe_device = "mps"
+        else:
+            pipe_device = -1
         self._pipe = pipeline(
             task="depth-estimation",
             model=self.spec.weights,
@@ -274,7 +281,7 @@ def _ensure_backend(model_id: str) -> DepthBackend:
         if _active_backend is not None:
             _active_backend.unload()
             _active_backend = None
-            _free_cuda()
+            _free_device_cache()
 
         backend = _make_backend(spec)
         backend.load(device)
@@ -283,14 +290,22 @@ def _ensure_backend(model_id: str) -> DepthBackend:
         return backend
 
 
-def _free_cuda() -> None:
+def _free_device_cache() -> None:
+    """Release cached accelerator memory for the just-unloaded model.
+
+    Called on model switch before the replacement backend loads (so ``_active_device``
+    still names the outgoing device). Import- and attribute-guarded: a no-op on CPU
+    and on torch builds without an ``mps`` module.
+    """
     try:
         import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
     except ImportError:
-        pass
+        return
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    mps = getattr(torch, "mps", None)
+    if _active_device == "mps" and mps is not None:
+        mps.empty_cache()
 
 
 # --- inference-time history (drives the UI's depth ETA) ----------------------------
