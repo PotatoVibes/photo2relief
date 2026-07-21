@@ -57,8 +57,9 @@ def test_health() -> None:
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "ok"
-    assert body["device"] in {"cpu", "cuda"}
+    assert body["device"] in {"cpu", "cuda", "mps"}
     assert isinstance(body["cuda_available"], bool)
+    assert isinstance(body["mps_available"], bool)
 
 
 def test_index_page_loads() -> None:
@@ -236,9 +237,14 @@ def test_put_params_rejects_bad_depth_window(portrait_jpeg_bytes: bytes) -> None
 def test_put_params_switching_model_triggers_new_inference_job(
     portrait_jpeg_bytes: bytes, _stub_inference
 ) -> None:
+    from app.config import MODEL_REGISTRY
+
     session_id = _create_session(portrait_jpeg_bytes)
+    # The session's default model depends on the host device (cpu/cuda/mps), so pick a
+    # target that's guaranteed *different* from whatever it seeded, to force a real switch.
+    current_model = client.get(f"/api/sessions/{session_id}/params").json()["depth_model"]
+    other_model = next(m for m in MODEL_REGISTRY if m != current_model)
     _stub_inference.clear()  # drop the creation-time call, only care about the switch
-    other_model = "da2-small"
     res = client.put(f"/api/sessions/{session_id}/params", json={"depth_model": other_model})
     assert res.status_code == 200
     assert (session_id, other_model) in _stub_inference

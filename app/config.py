@@ -27,7 +27,8 @@ class Settings:
     models_dir: Path = Path(os.environ.get("P2R_MODELS_DIR", str(data_dir / "models")))
     cache_dir: Path = Path(os.environ.get("P2R_CACHE_DIR", str(data_dir / "cache")))
 
-    device_override: str = os.environ.get("P2R_DEVICE", "auto")  # "auto" | "cpu" | "cuda"
+    # "auto" | "cpu" | "cuda" | "mps"  (auto precedence: cuda > mps > cpu)
+    device_override: str = os.environ.get("P2R_DEVICE", "auto")
 
     max_infer_px: int = _env_int("P2R_MAX_INFER_PX", 1024)
     max_upload_bytes: int = _env_int("P2R_MAX_UPLOAD_MB", 40) * 1024 * 1024
@@ -41,6 +42,10 @@ class Settings:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # HF_HOME should point at the mounted models volume so weights persist offline.
         os.environ.setdefault("HF_HOME", str(self.models_dir))
+        # Apple-Silicon MPS doesn't implement every op; let torch fall back to CPU for
+        # the stragglers instead of crashing mid-inference. Harmless off-MPS; setdefault
+        # respects an explicit user override.
+        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 
 settings = Settings()
@@ -99,10 +104,14 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
 def resolve_default_model(device: str) -> str:
     """The model auto-selected when the user hasn't chosen one.
 
-    GPU → the SPEC default (``da3mono-large``, overridable via P2R_DEFAULT_MODEL_ID),
+    GPU (cuda) → the SPEC default (``da3mono-large``, overridable via P2R_DEFAULT_MODEL_ID),
     falling back to ``da2-large`` if the configured default is unavailable.
+    Apple-Silicon (mps) → ``da2-large``: the best model that actually runs on MPS (DA3's
+    worker deps don't install on arm64 Mac), and the M-series GPU handles it comfortably.
     CPU → ``da2-small`` (the fast Apache-licensed fallback), per SPEC §5.1.1.
     """
+    if device == "mps":
+        return "da2-large"
     if device != "cuda":
         return "da2-small"
     spec = MODEL_REGISTRY.get(settings.default_model_id)

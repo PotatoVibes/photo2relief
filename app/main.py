@@ -58,13 +58,14 @@ def _not_found(session_id: str) -> JSONResponse:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # SPEC §5.1: log the chosen device and model loudly at startup.
-    cuda_available, torch_version = _torch_info()
+    cuda_available, mps_available, torch_version = _torch_info()
     device = depth.select_device()
     logger.warning(
-        "photo2relief starting: device=%s cuda_available=%s torch=%s default_model=%s "
-        "(models lazy-load on first inference)",
+        "photo2relief starting: device=%s cuda_available=%s mps_available=%s torch=%s "
+        "default_model=%s (models lazy-load on first inference)",
         device,
         cuda_available,
+        mps_available,
         torch_version,
         resolve_default_model(device),
     )
@@ -76,21 +77,23 @@ app = FastAPI(title="Photo2Relief", lifespan=_lifespan)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
-def _torch_info() -> tuple[bool, str | None]:
+def _torch_info() -> tuple[bool, bool, str | None]:
+    """(cuda_available, mps_available, torch_version)."""
     try:
         import torch
     except ImportError:
-        return False, None
-    return torch.cuda.is_available(), torch.__version__
+        return False, False, None
+    return torch.cuda.is_available(), depth._mps_available(torch), torch.__version__
 
 
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    cuda_available, torch_version = _torch_info()
+    cuda_available, mps_available, torch_version = _torch_info()
     return HealthResponse(
         status="ok",
         device=depth.select_device(),
         cuda_available=cuda_available,
+        mps_available=mps_available,
         torch_version=torch_version,
         model_loaded=depth.active_model_id() is not None,
         active_model=depth.active_model_id(),
