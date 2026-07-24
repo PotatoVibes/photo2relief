@@ -6,11 +6,69 @@ test_depth_smoke.py behind @pytest.mark.slow.
 
 from __future__ import annotations
 
+import sys
+import types
+
 import numpy as np
 import pytest
 
 from app import depth
 from app.config import MODEL_REGISTRY, resolve_default_model
+
+
+def _fake_torch(*, cuda: bool, mps: bool) -> types.ModuleType:
+    """A minimal stand-in torch exposing just what select_device() touches."""
+    mod = types.ModuleType("torch")
+    mod.cuda = types.SimpleNamespace(is_available=lambda: cuda)
+    mod.backends = types.SimpleNamespace(mps=types.SimpleNamespace(is_available=lambda: mps))
+    return mod
+
+
+def _select_with(monkeypatch, *, override: str, cuda: bool, mps: bool) -> str:
+    monkeypatch.setattr(depth.settings, "device_override", override)
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch(cuda=cuda, mps=mps))
+    return depth.select_device()
+
+
+def test_select_device_auto_precedence_cuda_over_mps_over_cpu(monkeypatch) -> None:
+    # cuda wins when present, regardless of mps.
+    assert _select_with(monkeypatch, override="auto", cuda=True, mps=True) == "cuda"
+    # mps is preferred over cpu when there's no cuda.
+    assert _select_with(monkeypatch, override="auto", cuda=False, mps=True) == "mps"
+    # cpu is the floor.
+    assert _select_with(monkeypatch, override="auto", cuda=False, mps=False) == "cpu"
+
+
+def test_select_device_forced_mps_requires_availability(monkeypatch) -> None:
+    assert _select_with(monkeypatch, override="mps", cuda=False, mps=True) == "mps"
+    monkeypatch.setattr(depth.settings, "device_override", "mps")
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch(cuda=False, mps=False))
+    with pytest.raises(depth.DepthInferenceError, match="mps"):
+        depth.select_device()
+
+
+def test_select_device_forced_cpu_and_cuda(monkeypatch) -> None:
+    # Forced cpu never touches an accelerator.
+    assert _select_with(monkeypatch, override="cpu", cuda=True, mps=True) == "cpu"
+    # Forced cuda requires cuda.
+    assert _select_with(monkeypatch, override="cuda", cuda=True, mps=False) == "cuda"
+    monkeypatch.setattr(depth.settings, "device_override", "cuda")
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch(cuda=False, mps=True))
+    with pytest.raises(depth.DepthInferenceError, match="cuda"):
+        depth.select_device()
+
+
+def test_select_device_no_torch_is_cpu(monkeypatch) -> None:
+    monkeypatch.setattr(depth.settings, "device_override", "auto")
+    # Simulate torch not being importable.
+    monkeypatch.setitem(sys.modules, "torch", None)
+    assert depth.select_device() == "cpu"
+
+
+def test_mps_available_tolerates_old_torch(monkeypatch) -> None:
+    # A torch build without torch.backends.mps must not raise.
+    bare = types.ModuleType("torch")
+    assert depth._mps_available(bare) is False
 
 
 def test_registry_has_three_models() -> None:
@@ -27,6 +85,8 @@ def test_resolve_default_model() -> None:
     assert resolve_default_model("cpu") == "da2-small"
     # M2.5: the SPEC default is back in effect on GPU.
     assert resolve_default_model("cuda") == "da3mono-large"
+    # Apple-Silicon: best model that runs on MPS (DA3 can't install on arm64 Mac).
+    assert resolve_default_model("mps") == "da2-large"
 
 
 def test_normalize_disparity_no_flip() -> None:

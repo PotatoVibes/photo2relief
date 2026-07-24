@@ -56,10 +56,23 @@ docker compose up --build
 
 | Image | For | Notes |
 |---|---|---|
-| `ghcr.io/potatovibes/photo2relief:latest` | **CPU** | Portable, smaller. Auto-selects the lightweight DA2-Small model. |
-| `ghcr.io/potatovibes/photo2relief:latest-gpu` | **NVIDIA GPU** | CUDA stack + the DA3MONO worker baked in. Multi-GB image; needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
+| `ghcr.io/potatovibes/photo2relief:latest` | **CPU** | Portable, smaller. **Multi-arch (amd64 + arm64)** — runs natively on Apple Silicon Macs. Auto-selects the lightweight DA2-Small model. |
+| `ghcr.io/potatovibes/photo2relief:latest-gpu` | **NVIDIA GPU** | amd64 only. CUDA stack + the DA3MONO worker baked in. Multi-GB image; needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
 
 Each tagged release also publishes pinned tags (`:1.0.0`, `:1.0.0-gpu`). The `-gpu` tag only means the CUDA stack is *baked in* — it still needs a GPU host to use it, and falls back to CPU otherwise. To pin a release with the `docker run` command above, swap `:latest-gpu` / `:latest` for the pinned tag.
+
+### Running on an Apple Silicon Mac (M1/M2/M3/M4)
+
+You have two options. **For GPU acceleration, run natively — not in Docker** (Docker on macOS can't reach the Metal GPU):
+
+```bash
+uv sync --extra cpu                                 # installs arm64 CPU/Metal torch
+uv run uvicorn app.main:app --port 8090             # P2R_DEVICE defaults to "auto" -> picks MPS
+```
+
+`GET /api/health` will report `"device":"mps"`. The M-series GPU (MPS) makes depth roughly **9–10× faster** than CPU (measured on an M3: DA2-Large ~28 s → ~3 s at 12 MP). The default model on MPS is **DA2-Large**. DA3MONO is not available on Mac and selecting it fails with a clear message. If MPS ever misbehaves, `P2R_DEVICE=cpu uv run uvicorn …` forces CPU.
+
+The Docker path (the multi-arch CPU image above) also runs natively on Apple Silicon, but is **CPU-only** — use it for portability; use the native run for speed.
 
 ## Security & scope
 

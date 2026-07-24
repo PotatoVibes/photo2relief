@@ -37,8 +37,25 @@ class DepthInferenceError(RuntimeError):
 # --- device selection -------------------------------------------------------------
 
 
+def _mps_available(torch) -> bool:
+    """True if this torch build exposes a usable Apple-Silicon MPS backend.
+
+    Guarded with getattr: older torch builds (and non-macOS ones) may lack
+    ``torch.backends.mps`` entirely.
+    """
+    backends = getattr(torch, "backends", None)
+    mps = getattr(backends, "mps", None) if backends is not None else None
+    return bool(mps is not None and mps.is_available())
+
+
 def select_device() -> str:
-    """Resolve the active device from P2R_DEVICE + torch CUDA availability."""
+    """Resolve the active device from P2R_DEVICE + torch backend availability.
+
+    ``P2R_DEVICE`` (config ``device_override``): ``"auto"`` (default) picks the best
+    available backend in precedence order **cuda > mps > cpu**; ``"cpu"``/``"cuda"``/
+    ``"mps"`` force that backend (and the two accelerators raise if unavailable, so a
+    misconfig fails loudly instead of silently running on CPU).
+    """
     try:
         import torch
     except ImportError:
@@ -51,7 +68,16 @@ def select_device() -> str:
         if not cuda:
             raise DepthInferenceError("P2R_DEVICE=cuda but no CUDA device is available.")
         return "cuda"
-    return "cuda" if cuda else "cpu"
+    mps = _mps_available(torch)
+    if settings.device_override == "mps":
+        if not mps:
+            raise DepthInferenceError("P2R_DEVICE=mps but no MPS device is available.")
+        return "mps"
+    if cuda:
+        return "cuda"
+    if mps:
+        return "mps"
+    return "cpu"
 
 
 # --- convention normalization (pure, unit-tested) ---------------------------------
@@ -105,7 +131,14 @@ class TransformersDA2Backend:
         from transformers import pipeline
 
         self._device = device
-        pipe_device = 0 if device == "cuda" else -1
+        # transformers pipeline() accepts an int index (0 = cuda:0, -1 = cpu) or a
+        # device string; pass "mps" through so Apple-Silicon runs hit the GPU.
+        if device == "cuda":
+            pipe_device: int | str = 0
+        elif device == "mps":
+            pipe_device = "mps"
+        else:
+            pipe_device = -1
         self._pipe = pipeline(
             task="depth-estimation",
             model=self.spec.weights,
@@ -248,7 +281,7 @@ def _ensure_backend(model_id: str) -> DepthBackend:
         if _active_backend is not None:
             _active_backend.unload()
             _active_backend = None
-            _free_cuda()
+            _free_device_cache()
 
         backend = _make_backend(spec)
         backend.load(device)
@@ -257,14 +290,22 @@ def _ensure_backend(model_id: str) -> DepthBackend:
         return backend
 
 
-def _free_cuda() -> None:
+def _free_device_cache() -> None:
+    """Release cached accelerator memory for the just-unloaded model.
+
+    Called on model switch before the replacement backend loads (so ``_active_device``
+    still names the outgoing device). Import- and attribute-guarded: a no-op on CPU
+    and on torch builds without an ``mps`` module.
+    """
     try:
         import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
     except ImportError:
-        pass
+        return
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    mps = getattr(torch, "mps", None)
+    if _active_device == "mps" and mps is not None:
+        mps.empty_cache()
 
 
 # --- inference-time history (drives the UI's depth ETA) ----------------------------
