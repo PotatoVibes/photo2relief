@@ -1,0 +1,43 @@
+name: ci
+
+# Runs on every PR and on pushes to main. publish.yml only fires on version
+# tags, so without this nothing exercised the code until release time. This
+# holds each PR to the same bar as a commit: ruff clean + the fast test suite.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch/PR cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (+ Python 3.12)
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      # CPU torch extra: GitHub runners have no GPU, and this mirrors the CPU
+      # Docker image. NEVER a bare `uv sync` here — with no extra it uninstalls
+      # the whole torch tree (see CLAUDE.md gotchas).
+      - name: Install dependencies
+        run: uv sync --extra cpu
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+
+      # Fast suite only; the two `-m slow` real-inference tests need model
+      # weights / the DA3 worker venv and are deselected by default config.
+      - name: Tests (fast suite)
+        run: uv run pytest -q
