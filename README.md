@@ -12,19 +12,31 @@ Under the hood: monocular depth estimation (Depth Anything family) → heightmap
 
 Prerequisites: Docker + Docker Compose. For GPU mode (recommended): an NVIDIA GPU and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
-The fastest path pulls a **pre-built image** from GitHub Container Registry — no local build:
+The fastest path pulls a **pre-built image** from GitHub Container Registry — no clone, no local files, one command:
 
 ```bash
 # GPU (recommended — pulls the CUDA image, reserves your NVIDIA GPU)
-docker compose -f docker-compose.ghcr.yml -f docker-compose.gpu-ghcr.yml up -d
+docker run -d --name photo2relief --pull always --gpus all -p 127.0.0.1:8090:8090 -e P2R_DEVICE=auto -v photo2relief-models:/srv/data/models -v photo2relief-sessions:/srv/data/sessions ghcr.io/potatovibes/photo2relief:latest-gpu
 
-# CPU (portable; auto-selects the lightweight model)
-docker compose -f docker-compose.ghcr.yml up -d
+# CPU (portable; auto-selects the lightweight model, no NVIDIA toolkit needed)
+docker run -d --name photo2relief --pull always -p 127.0.0.1:8090:8090 -e P2R_DEVICE=cpu -v photo2relief-models:/srv/data/models -v photo2relief-sessions:/srv/data/sessions ghcr.io/potatovibes/photo2relief:latest
 ```
 
-Open **http://localhost:8090**. First run downloads the default depth model into `./data/models/` (one-time, ~1–2 GB); after that the app works fully offline. Confirm the device with `curl http://localhost:8090/api/health` (expect `"device":"cuda"` in GPU mode). Stop with the same command + `down` instead of `up -d`.
+Open **http://localhost:8090**. First run downloads the default depth model (one-time, ~1–2 GB, cached in the `photo2relief-models` volume); after that the app works fully offline. Confirm the device with `curl http://localhost:8090/api/health` (expect `"device":"cuda"` in GPU mode). Stop and remove with `docker rm -f photo2relief` — your models and sessions persist in the named volumes.
 
-Pin a specific release instead of the latest by setting `P2R_TAG` (e.g. `P2R_TAG=1.0.0`); port and other settings are env-configurable — see the compose files.
+> On Windows PowerShell the command above works as a single line. If you split it across lines, use a backtick (`` ` ``) at each line end, not the `\` shown in Bash examples.
+
+### Manage it with Docker Compose instead
+
+If you have the repo cloned, the `.ghcr` compose files give you the same pull-based run with `down` to stop, config visible in one place, and named-service management:
+
+```bash
+# from the repo root:
+docker compose -f docker-compose.ghcr.yml -f docker-compose.gpu-ghcr.yml up -d   # GPU
+docker compose -f docker-compose.ghcr.yml up -d                                  # CPU
+```
+
+These write model/session data to `./data/` (relative to the repo) rather than Docker-managed volumes. Stop with the same command + `down` instead of `up -d`. Pin a specific release by setting `P2R_TAG` (e.g. `P2R_TAG=1.0.0`); port and other settings are env-configurable — see the compose files.
 
 ### Build from source instead
 
@@ -47,14 +59,14 @@ docker compose up --build
 | `ghcr.io/potatovibes/photo2relief:latest` | **CPU** | Portable, smaller. Auto-selects the lightweight DA2-Small model. |
 | `ghcr.io/potatovibes/photo2relief:latest-gpu` | **NVIDIA GPU** | CUDA stack + the DA3MONO worker baked in. Multi-GB image; needs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). |
 
-Each tagged release also publishes pinned tags (`:1.0.0`, `:1.0.0-gpu`). The `-gpu` tag only means the CUDA stack is *baked in* — it still needs a GPU host to use it, and falls back to CPU otherwise. Prefer Compose (above); to run without it, `docker run --gpus all -p 127.0.0.1:8090:8090 -v "$PWD/data/models:/srv/data/models" ghcr.io/potatovibes/photo2relief:latest-gpu`.
+Each tagged release also publishes pinned tags (`:1.0.0`, `:1.0.0-gpu`). The `-gpu` tag only means the CUDA stack is *baked in* — it still needs a GPU host to use it, and falls back to CPU otherwise. To pin a release with the `docker run` command above, swap `:latest-gpu` / `:latest` for the pinned tag.
 
 ## Security & scope
 
 This is a **single-user, unauthenticated tool meant to run on your own machine.** There are no accounts or access control — anyone who can reach the port can upload images, run compute, and download meshes. Treat it like a local dev server:
 
-- The Docker compose file binds the port to **`127.0.0.1` (localhost only)** by default, so nothing is exposed to your network out of the box. That's deliberate — keep it that way.
-- **Do not** port-forward it or put it on a public IP as-is. If you genuinely need remote/LAN access, put an authenticating reverse proxy (or at least HTTP basic auth) in front of it first, and only then change the `127.0.0.1` prefix in `docker-compose.yml`.
+- Both the `docker run` command and the compose files bind the port to **`127.0.0.1` (localhost only)** by default, so nothing is exposed to your network out of the box. That's deliberate — keep it that way.
+- **Do not** port-forward it or put it on a public IP as-is. If you genuinely need remote/LAN access, put an authenticating reverse proxy (or at least HTTP basic auth) in front of it first, and only then change the `127.0.0.1` prefix (in the `-p` flag or in `docker-compose.yml`).
 - It has no rate limiting and keeps every uploaded session on disk under `./data/`, so an untrusted caller could fill your disk or saturate your GPU. Fine on localhost; not fine when exposed.
 
 ## Using the app
