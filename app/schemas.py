@@ -77,6 +77,7 @@ class HealthResponse(BaseModel):
     status: str
     device: str
     cuda_available: bool
+    mps_available: bool
     torch_version: str | None
     model_loaded: bool
     active_model: str | None
